@@ -4,9 +4,12 @@ export type Lang = "fr" | "en";
 
 /** Non-breaking space, used before French high punctuation. */
 const NB = " ";
+/** French plural: 0 and 1 take the singular. */
 const s = (n: number) => (n > 1 ? "s" : "");
+/** English plural: only 1 takes the singular. */
+const es = (n: number) => (n === 1 ? "" : "s");
 
-type ErrorKey = RuleError | "network" | "conflict" | "notFound" | "full" | "started" | "unavailable" | "badName";
+type ErrorKey = RuleError | "network" | "server" | "conflict" | "notFound" | "full" | "started" | "unavailable" | "badName";
 
 const fr = {
   tagline: "Le jeu de chiffres où chaque ligne de trois fait 15.",
@@ -30,14 +33,15 @@ const fr = {
     playerN: (n: number) => `Joueur ${n}`,
     start: "Commencer",
     create: "Créer la partie",
-    joinCode: "Vous avez un code ou un lien ?",
+    joinCode: `Vous avez un code ou un lien${NB}?`,
     join: "Rejoindre",
-    defaultName: "Moi",
+    defaultName: "Joueur 1",
   },
   levels: { easy: "Facile", normal: "Moyen", hard: "Difficile" } satisfies Record<BotLevel, string>,
   botName: (n: number) => `Robot ${n}`,
   game: {
     bag: "Sac",
+    bagCount: (n: number) => `Sac${NB}: ${n} jeton${s(n)}`,
     tiles: (n: number) => `${n} jeton${s(n)}`,
     yourTurn: "À vous de jouer",
     turnOf: (name: string) => `Au tour de ${name}`,
@@ -67,6 +71,7 @@ const fr = {
     legendReplay: "Rejouer",
     legendCentre: "Départ (double)",
     rack: "Votre chevalet",
+    board: "Plateau, flèches pour se déplacer",
     cellLabel: (row: number, col: number) => `Ligne ${row}, colonne ${col}`,
     wild: "joker",
   },
@@ -97,6 +102,7 @@ const fr = {
     copy: "Copier",
     copied: `Copié${NB}!`,
     waiting: (n: number, total: number) => `${n} joueur${s(n)} sur ${total}`,
+    waitingList: (n: number, total: number, names: string) => `${n} joueur${s(n)} sur ${total}${NB}: ${names}`,
     startNow: "Commencer maintenant",
     hostStarts: "La partie commence dès que tout le monde est là.",
     joinTitle: "Rejoindre la partie",
@@ -124,6 +130,7 @@ const fr = {
     exchangeEmpty: "Choisissez au moins un jeton à échanger.",
     exchangeBagLow: `Échange impossible${NB}: moins de 5 jetons dans le sac.`,
     network: "Connexion perdue, nouvel essai…",
+    server: "Le serveur n’a pas pu traiter la demande. Réessayez.",
     conflict: "La partie a changé, mise à jour…",
     notFound: "Partie introuvable ou expirée.",
     full: "Cette partie est complète.",
@@ -138,7 +145,7 @@ const fr = {
       "Chaque joueur a 3 jetons. Il y en a 81 numérotés et 2 jokers ; 3 jetons sont écartés au début sans être vus.",
       "À votre tour, posez 1, 2 ou 3 jetons sur une même ligne ou colonne, sans trou, en touchant un jeton déjà posé. Le premier coup couvre l’étoile centrale.",
       "Deux jetons voisins font 15 au maximum. Trois jetons alignés font exactement 15. Jamais quatre jetons alignés.",
-      "Chaque groupe de 2 ou 3 jetons créé ou complété rapporte la somme de ses jetons. Un trio vaut 15 + 15 de prime = 30 points.",
+      "Chaque groupe de 2 ou 3 jetons créé ou complété rapporte la somme de ses jetons. Un trio vaut 15 + 15 de prime = 30 points. Un jeton seul au premier coup vaut sa valeur, doublée par l’étoile.",
       "Les cases ×2 et ×3 multiplient les groupes qui passent par le jeton que vous venez d’y poser, prime comprise. L’étoile centrale compte double.",
       "Triolet : vos 3 jetons posés d’un coup forment un trio. Prime de 50 points, jamais multipliée, et pas avec un joker.",
       "Joker : il prend la valeur de votre choix pour toute la partie. Un seul joker par tour. Il ne vaut rien s’il reste sur un chevalet à la fin.",
@@ -176,13 +183,14 @@ const en: Messages = {
     create: "Create game",
     joinCode: "Got a code or a link?",
     join: "Join",
-    defaultName: "Me",
+    defaultName: "Player 1",
   },
   levels: { easy: "Easy", normal: "Medium", hard: "Hard" },
   botName: (n) => `Bot ${n}`,
   game: {
     bag: "Bag",
-    tiles: (n) => `${n} tile${s(n)}`,
+    bagCount: (n) => `Bag: ${n} tile${es(n)}`,
+    tiles: (n) => `${n} tile${es(n)}`,
     yourTurn: "Your turn",
     turnOf: (name) => `${name}’s turn`,
     thinking: (name) => `${name} is thinking…`,
@@ -194,10 +202,10 @@ const en: Messages = {
     cancel: "Cancel",
     confirmPass: "Pass your turn?",
     exchangeHint: "Tap the tiles to put back in the bag.",
-    swap: (n) => `Swap ${n} tile${s(n)}`,
+    swap: (n) => `Swap ${n} tile${es(n)}`,
     hint: "Tap a tile, then a square on the board.",
     hintFirst: "The first move must cover the centre star.",
-    points: (n) => `${n} point${s(n)}`,
+    points: (n) => `${n} point${es(n)}`,
     trio: "trio",
     triolet: "Triolet! +50",
     replay: "Play again!",
@@ -211,19 +219,20 @@ const en: Messages = {
     legendReplay: "Play again",
     legendCentre: "Start (double)",
     rack: "Your rack",
+    board: "Board, use the arrow keys to move",
     cellLabel: (row, col) => `Row ${row}, column ${col}`,
     wild: "wild",
   },
   log: {
-    place: (name, points) => `${name}: ${points} pts`,
-    exchange: (name, n) => `${name} exchanged ${n} tile${s(n)}`,
+    place: (name, points) => `${name}: ${points} pt${es(points)}`,
+    exchange: (name, n) => `${name} exchanged ${n} tile${es(n)}`,
     pass: (name) => `${name} passed`,
   },
   over: {
     title: "Game over",
     winner: (name) => `${name} wins!`,
     tie: (names) => `It’s a tie between ${names}!`,
-    out: (name, points) => `${name} played their last tile and collects ${points} point${s(points)} from the other racks.`,
+    out: (name, points) => `${name} played their last tile and collects ${points} point${es(points)} from the other racks.`,
     blocked: "No more tiles can be played.",
     stalled: "Two full rounds without a tile placed.",
     rematch: "Rematch",
@@ -240,6 +249,7 @@ const en: Messages = {
     copy: "Copy",
     copied: "Copied!",
     waiting: (n, total) => `${n} of ${total} players`,
+    waitingList: (n, total, names) => `${n} of ${total} players: ${names}`,
     startNow: "Start now",
     hostStarts: "The game starts as soon as everyone is here.",
     joinTitle: "Join the game",
@@ -267,6 +277,7 @@ const en: Messages = {
     exchangeEmpty: "Choose at least one tile to exchange.",
     exchangeBagLow: "Can’t exchange: fewer than 5 tiles left in the bag.",
     network: "Connection lost, retrying…",
+    server: "The server couldn’t handle that request. Please try again.",
     conflict: "The game changed, refreshing…",
     notFound: "Game not found or expired.",
     full: "This game is full.",
@@ -281,7 +292,7 @@ const en: Messages = {
       "Everyone holds 3 tiles. There are 81 numbered tiles and 2 wilds; 3 tiles are set aside unseen at the start.",
       "On your turn, place 1, 2 or 3 tiles in one row or column, with no gaps, touching a tile already on the board. The first move covers the centre star.",
       "Two neighbouring tiles total 15 at most. Three in a row total exactly 15. Never four in a row.",
-      "Every group of 2 or 3 tiles you create or complete scores the sum of its tiles. A trio is worth 15 plus a 15 bonus, so 30 points.",
+      "Every group of 2 or 3 tiles you create or complete scores the sum of its tiles. A trio is worth 15 plus a 15 bonus, so 30 points. A single opening tile scores its own value, doubled by the star.",
       "×2 and ×3 squares multiply every group running through the tile you just placed there, bonus included. The centre star counts double.",
       "Triolet: all 3 of your tiles placed at once as a trio. 50 bonus points, never multiplied, and not with a wild.",
       "Wild: it takes the value you choose for the rest of the game. One wild per turn. It’s worth nothing if left on a rack at the end.",
@@ -294,3 +305,8 @@ const en: Messages = {
 };
 
 export const MESSAGES: Record<Lang, Messages> = { fr, en };
+
+/** Text for an API or rule error code; unknown codes get a generic message. */
+export function errorMessage(t: Messages, code: string): string {
+  return code in t.errors ? t.errors[code as keyof Messages["errors"]] : t.errors.server;
+}

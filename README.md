@@ -19,7 +19,7 @@ The full rules are in the app (the **Règles / Rules** button). In short:
 - 81 tiles numbered 0 to 15 (nine 0s down to one 15) plus 2 wilds. Three tiles are set aside unseen; everyone holds 3.
 - Place 1 to 3 tiles in one row or column, no gaps, touching the tiles already down. The first move covers the centre star, which counts double.
 - Two neighbouring tiles total 15 at most, three in a row total exactly 15, and four in a row is never allowed.
-- Each group of 2 or 3 you create or complete scores its sum. A trio scores 15 plus a 15 bonus, so 30. ×2 and ×3 squares multiply the groups through the tile you just put there.
+- Each group of 2 or 3 you create or complete scores its sum. A trio scores 15 plus a 15 bonus, so 30. ×2 and ×3 squares multiply the groups through the tile you just put there. A single opening tile scores its own value, doubled by the star.
 - A **Triolet** (all 3 rack tiles placed at once as a trio) earns 50 more points, never multiplied, and not with a wild.
 - A **play again** square gives you another turn.
 - The game ends when the bag is empty and someone plays their last tile. They collect the value of the tiles left on the other racks.
@@ -34,11 +34,11 @@ The official rulebook PDFs weren't reachable while building this, so some detail
 | Wild value | Counts its chosen value on the board (a trio with a wild is still 30), but 0 if left on a rack at the end | Gigamic's English rules say the trio is still 30; French sources say a wild is worth nothing at the final count. This reading satisfies both. |
 | Exchanges | Allowed while at least 5 tiles remain in the bag | From one French source. |
 | Two premium squares in one group | Both apply (×2 and ×3 make ×6) | Same as Scrabble. Premiums only count on the turn a tile is placed. |
-| Stuck games | The game ends if no tile of any value fits anywhere, or after two full rounds with no tile placed | Not covered by the rules found. Without this, simulated games could loop forever on exchanges. |
+| Stuck games | The game ends when the bag is empty and nobody can play, when no tile of any value fits anywhere, or after two full rounds with no tile placed | Only the first is in the sources found. Without the other two, simulated games could loop forever on exchanges. |
 
 ## Deploying to Vercel
 
-1. In Vercel, **Add New → Project** and import this repository. Vercel detects Next.js; no settings to change.
+1. In Vercel, **Add New → Project** and import this repository. `vercel.json` pins the framework to Next.js; leave **Root Directory** empty (the repository root).
 2. Vercel deploys the repository's default branch (`develop`) to production, and every other branch as a preview. Merge this work into `develop` for the production site.
 3. To switch on online play: in the Vercel project, open **Storage**, create an **Upstash Redis** database on the free plan and connect it to the project, then redeploy. Vercel adds the credentials as environment variables. Trios reads `KV_REST_API_URL` and `KV_REST_API_TOKEN`, `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`, or the same names with a custom prefix.
 

@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { Move, RuleError } from "@/engine";
 import { useI18n } from "@/i18n/I18nProvider";
-import type { Messages } from "@/i18n/messages";
+import { errorMessage } from "@/i18n/messages";
 import { ApiFailure, api, loadName, loadSeat, saveName, saveSeat, type SavedSeat } from "@/lib/online/client";
 import { MAX_NAME, type Snapshot } from "@/lib/online/protocol";
 import { useHydrated } from "@/lib/useHydrated";
@@ -21,9 +21,6 @@ export function OnlineGame() {
   return useHydrated() ? <OnlineGameLoaded key={id} id={id} /> : <div className="loading" />;
 }
 
-function errorText(t: Messages, code: string) {
-  return code in t.errors ? t.errors[code as keyof Messages["errors"]] : t.errors.network;
-}
 
 function OnlineGameLoaded({ id }: { id: string }) {
   const { t } = useI18n();
@@ -31,6 +28,7 @@ function OnlineGameLoaded({ id }: { id: string }) {
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [fatal, setFatal] = useState<Fatal | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [rematching, setRematching] = useState(false);
   const rev = useRef<number | undefined>(undefined);
   const token = seat?.token ?? null;
 
@@ -96,7 +94,7 @@ function OnlineGameLoaded({ id }: { id: string }) {
   }
   if (!snap) return <div className="loading" />;
 
-  const noticeText = notice ? errorText(t, notice) : null;
+  const noticeText = notice ? errorMessage(t, notice) : null;
 
   if (!snap.started) {
     return snap.seat === null ? (
@@ -125,11 +123,15 @@ function OnlineGameLoaded({ id }: { id: string }) {
   };
 
   const rematch = async () => {
+    setRematching(true);
     try {
       apply(await api.rematch(id, token!));
     } catch (error) {
       // Someone else may have started the rematch already; the next poll shows it.
-      setNotice(error instanceof ApiFailure && error.code === "notOver" ? null : "network");
+      const code = error instanceof ApiFailure ? error.code : "network";
+      setNotice(code === "notOver" ? null : code);
+    } finally {
+      setRematching(false);
     }
   };
 
@@ -142,7 +144,7 @@ function OnlineGameLoaded({ id }: { id: string }) {
       overActions={
         <>
           {snap.seat !== null && (
-            <button type="button" className="btn primary" onClick={rematch}>
+            <button type="button" className="btn primary" onClick={rematch} disabled={rematching}>
               {t.over.rematch}
             </button>
           )}
@@ -185,7 +187,7 @@ function Lobby({
     try {
       onUpdate(await api.start(snap.id, token));
     } catch (e) {
-      setError(errorText(t, e instanceof ApiFailure ? e.code : "network"));
+      setError(errorMessage(t, e instanceof ApiFailure ? e.code : "network"));
     }
   };
 
@@ -238,7 +240,7 @@ function JoinForm({ snap, onJoined }: { snap: Snapshot; onJoined: (grant: SavedS
       saveName(name.trim());
       onJoined(grant);
     } catch (err) {
-      setError(errorText(t, err instanceof ApiFailure ? err.code : "network"));
+      setError(errorMessage(t, err instanceof ApiFailure ? err.code : "network"));
     } finally {
       setBusy(false);
     }
@@ -247,7 +249,7 @@ function JoinForm({ snap, onJoined }: { snap: Snapshot; onJoined: (grant: SavedS
   return (
     <form className="centre-card card" onSubmit={join}>
       <h1>{t.lobby.joinTitle}</h1>
-      <p className="muted">{t.lobby.waiting(snap.names.length, snap.seats)}: {snap.names.join(", ")}</p>
+      <p className="muted">{t.lobby.waitingList(snap.names.length, snap.seats, snap.names.join(", "))}</p>
       {full ? (
         <p className="notice">{t.errors.full}</p>
       ) : (

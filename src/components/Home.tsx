@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { MAX_PLAYERS, MIN_PLAYERS, createGame, type BotLevel, type PlayerSetup } from "@/engine";
 import { useI18n } from "@/i18n/I18nProvider";
+import { errorMessage } from "@/i18n/messages";
 import { ApiFailure, api, loadName, saveName, saveSeat } from "@/lib/online/client";
 import { MAX_NAME, extractGameId } from "@/lib/online/protocol";
 import { loadLocal, saveLocal } from "@/lib/localGame";
@@ -85,7 +86,8 @@ function Setup() {
     api
       .config()
       .then((c) => !cancelled && setOnline(c.online))
-      .catch(() => !cancelled && setOnline(false));
+      // A failed check doesn't mean online play is off: let "Create" try and report its own error.
+      .catch(() => !cancelled && setOnline(true));
     return () => {
       cancelled = true;
     };
@@ -127,7 +129,7 @@ function Setup() {
       router.push(`/g/${grant.id}`);
     } catch (error) {
       const code = error instanceof ApiFailure ? error.code : "network";
-      setOnlineError(code in t.errors ? t.errors[code as keyof typeof t.errors] : t.errors.network);
+      setOnlineError(errorMessage(t, code));
       setBusy(false);
     }
   };

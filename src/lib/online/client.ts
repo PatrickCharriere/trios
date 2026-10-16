@@ -48,17 +48,21 @@ export interface SavedSeat {
   seat: number;
 }
 
+/** Fallback when the browser blocks storage, so the host keeps their seat after creating a game. */
+const memorySeats: Record<string, SavedSeat> = {};
+
 function readSeats(): Record<string, SavedSeat> {
   try {
-    return JSON.parse(window.localStorage.getItem(SEATS_KEY) ?? "{}");
+    return { ...memorySeats, ...JSON.parse(window.localStorage.getItem(SEATS_KEY) ?? "{}") };
   } catch {
-    return {};
+    return { ...memorySeats };
   }
 }
 
 export const loadSeat = (id: string): SavedSeat | null => readSeats()[id] ?? null;
 
 export function saveSeat(id: string, seat: SavedSeat) {
+  memorySeats[id] = seat;
   try {
     window.localStorage.setItem(SEATS_KEY, JSON.stringify({ ...readSeats(), [id]: seat }));
   } catch {

@@ -8,6 +8,7 @@ import { useI18n } from "@/i18n/I18nProvider";
 import { clearLocal, loadLocal, saveLocal, type LocalSave } from "@/lib/localGame";
 import { useHydrated } from "@/lib/useHydrated";
 import { GameTable } from "./GameTable";
+import { Modal } from "./Modal";
 
 const BOT_DELAY_MS = 750;
 
@@ -99,17 +100,15 @@ function LocalGameLoaded() {
         }
       />
       {needsHandoff && (
-        <div className="overlay handoff" role="dialog" aria-modal="true" aria-labelledby="handoff-title">
-          <div className="dialog-body card">
-            <h2 id="handoff-title">{t.handoff.title(state.players[current].name)}</h2>
-            <p className="muted">{t.handoff.body}</p>
-            <div className="actions">
-              <button type="button" className="btn primary" onClick={() => setRevealed(current)} autoFocus>
-                {t.handoff.ready}
-              </button>
-            </div>
+        // Keyed by player so each hand-off is a fresh modal; it can't be dismissed, only confirmed.
+        <Modal key={current} title={t.handoff.title(state.players[current].name)} className="handoff">
+          <p className="muted">{t.handoff.body}</p>
+          <div className="actions">
+            <button type="button" className="btn primary" onClick={() => setRevealed(current)} autoFocus>
+              {t.handoff.ready}
+            </button>
           </div>
-        </div>
+        </Modal>
       )}
     </>
   );
