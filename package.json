@@ -1,0 +1,30 @@
+{
+  "name": "trios",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Trios: a number tile game where every line of three must add up to 15.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.39.0",
+    "next": "16.4.2",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.2",
+    "typescript": "^5",
+    "vitest": "^5.0.5"
+  }
+}
