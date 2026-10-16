@@ -1,0 +1,390 @@
+"use client";
+
+import { useCallback, useMemo, useState, type ReactNode } from "react";
+import {
+  EXCHANGE_MIN_BAG,
+  MAX_VALUE,
+  evaluatePlacement,
+  isBoardEmpty,
+  type GameView,
+  type Move,
+  type Placement,
+  type RuleError,
+} from "@/engine";
+import { useI18n } from "@/i18n/I18nProvider";
+import { Board, type PendingTile } from "./Board";
+import { TileFace } from "./TileFace";
+
+export interface GameTableProps {
+  view: GameView;
+  /** True when the seat shown may act right now. */
+  canAct: boolean;
+  /** Banner shown when the player can't act (whose turn, thinking...). */
+  waiting?: ReactNode;
+  /** Extra notice, such as a connection problem. */
+  notice?: string | null;
+  onMove: (move: Move) => Promise<RuleError | null> | RuleError | null;
+  overActions?: ReactNode;
+}
+
+interface Draft {
+  version: number;
+  placements: Placement[];
+  selected: number | null;
+  mode: "place" | "exchange" | "confirmPass";
+  swap: number[];
+}
+
+const VALUES = Array.from({ length: MAX_VALUE + 1 }, (_, v) => v);
+
+export function GameTable({ view, canAct, waiting, notice, onMove, overActions }: GameTableProps) {
+  const { t } = useI18n();
+  const fresh = useCallback(
+    (): Draft => ({ version: view.version, placements: [], selected: null, mode: "place", swap: [] }),
+    [view.version],
+  );
+  const [stored, setDraft] = useState<Draft>(fresh);
+  // Anything drafted against an older position is dropped when the game moves on.
+  const draft = stored.version === view.version ? stored : fresh();
+  const update = (patch: Partial<Draft>) => setDraft({ ...draft, ...patch });
+
+  const [wildFor, setWildFor] = useState<{ tileId: number; cell: number } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [moveError, setMoveError] = useState<{ version: number; error: RuleError } | null>(null);
+
+  const active = canAct && !busy && view.status === "playing";
+  const { placements } = draft;
+  const usedIds = new Set(placements.map((p) => p.tileId));
+  const rackLeft = view.rack.filter((tile) => !usedIds.has(tile.id));
+
+  const evaluation = useMemo(
+    () => (placements.length ? evaluatePlacement(view.board, view.rack, placements) : null),
+    [view.board, view.rack, placements],
+  );
+
+  const pending = useMemo(() => {
+    const map = new Map<number, PendingTile>();
+    for (const p of placements) {
+      const tile = view.rack.find((t) => t.id === p.tileId);
+      if (tile) map.set(p.cell, { value: tile.face ?? p.value ?? null, wild: tile.face === null });
+    }
+    return map;
+  }, [placements, view.rack]);
+
+  const lastCells = useMemo(() => {
+    const last = [...view.log].reverse().find((e) => e.type === "place");
+    return new Set(last?.type === "place" ? last.cells : []);
+  }, [view.log]);
+
+  const errorCells = useMemo(
+    () => new Set(evaluation && !evaluation.ok ? (evaluation.cells ?? []) : []),
+    [evaluation],
+  );
+
+  const placeTile = (tileId: number, cell: number) => {
+    if (!active || view.board[cell] || placements.some((p) => p.cell === cell)) return;
+    const tile = view.rack.find((t) => t.id === tileId);
+    if (!tile || usedIds.has(tileId)) return;
+    if (tile.face === null) {
+      setWildFor({ tileId, cell });
+      return;
+    }
+    update({ placements: [...placements, { tileId, cell }], selected: null, mode: "place" });
+  };
+
+  const onCell = (cell: number) => {
+    const existing = placements.find((p) => p.cell === cell);
+    if (existing) {
+      update({ placements: placements.filter((p) => p !== existing), selected: null });
+      return;
+    }
+    const tileId = draft.selected ?? (rackLeft.length === 1 ? rackLeft[0].id : null);
+    if (tileId !== null) placeTile(tileId, cell);
+  };
+
+  const submit = async (move: Move) => {
+    setBusy(true);
+    setMoveError(null);
+    try {
+      const error = await onMove(move);
+      if (error) setMoveError({ version: view.version, error });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const currentName = view.players[view.current]?.name ?? "";
+  const bagLow = view.bagCount < EXCHANGE_MIN_BAG;
+  const shownError = moveError && moveError.version === view.version ? moveError.error : null;
+
+  let statusLine: ReactNode;
+  if (view.status === "over") {
+    statusLine = null;
+  } else if (!canAct) {
+    statusLine = waiting ?? t.game.turnOf(currentName);
+  } else if (shownError) {
+    statusLine = <span className="bad">{t.errors[shownError]}</span>;
+  } else if (draft.mode === "exchange") {
+    statusLine = bagLow ? <span className="bad">{t.errors.exchangeBagLow}</span> : t.game.exchangeHint;
+  } else if (draft.mode === "confirmPass") {
+    statusLine = t.game.confirmPass;
+  } else if (evaluation?.ok) {
+    statusLine = (
+      <span className="good">
+        {t.game.points(evaluation.score)}
+        {evaluation.groups.some((g) => g.trio) && <> · {t.game.trio}</>}
+        {evaluation.triolet && <> · {t.game.triolet}</>}
+        {evaluation.replay && <> · {t.game.replay}</>}
+      </span>
+    );
+  } else if (evaluation && !evaluation.ok) {
+    statusLine = <span className="bad">{t.errors[evaluation.error]}</span>;
+  } else {
+    statusLine = (
+      <>
+        <strong>{t.game.yourTurn}.</strong> {isBoardEmpty(view.board) ? t.game.hintFirst : t.game.hint}
+      </>
+    );
+  }
+
+  return (
+    <div className="table">
+      <section className="area-scores panel" aria-label="Scores">
+        <ul className="scores">
+          {view.players.map((player, i) => (
+            <li key={i} className={i === view.current && view.status === "playing" ? "current" : ""}>
+              <span className="who">
+                {player.name}
+                {i === view.seat && <span className="muted"> ({t.game.you})</span>}
+              </span>
+              <span className="dots" aria-label={t.game.tiles(view.rackCounts[i])}>
+                {Array.from({ length: view.rackCounts[i] }, (_, k) => (
+                  <span key={k} />
+                ))}
+              </span>
+              <span className="score">{player.score}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="bag">
+          {t.game.bag}: {t.game.tiles(view.bagCount)}
+        </p>
+      </section>
+
+      <section className="area-board">
+        <Board
+          board={view.board}
+          pending={pending}
+          pendingValid={!!evaluation?.ok}
+          lastCells={lastCells}
+          errorCells={errorCells}
+          interactive={active && draft.mode === "place"}
+          onCell={onCell}
+          onDropTile={(cell, tileId) => placeTile(tileId, cell)}
+        />
+      </section>
+
+      <ul className="area-legend legend" aria-hidden="true">
+        <li><span className="key sq-double">×2</span>{t.game.legendDouble}</li>
+        <li><span className="key sq-triple">×3</span>{t.game.legendTriple}</li>
+        <li><span className="key sq-replay">↻</span>{t.game.legendReplay}</li>
+        <li><span className="key sq-centre">★</span>{t.game.legendCentre}</li>
+      </ul>
+
+      <section className="area-controls panel">
+        {view.status === "over" ? (
+          <GameOver view={view} actions={overActions} />
+        ) : (
+          <>
+            <p className="status" aria-live="polite">{statusLine}</p>
+            {notice && <p className="notice">{notice}</p>}
+            {view.seat !== null ? (
+              <div className="rack" aria-label={t.game.rack}>
+                {(draft.mode === "exchange" ? view.rack : rackLeft).map((tile) => {
+                  const selected =
+                    draft.mode === "exchange" ? draft.swap.includes(tile.id) : draft.selected === tile.id;
+                  return (
+                    <button
+                      key={tile.id}
+                      type="button"
+                      className={`rack-slot${selected ? " selected" : ""}`}
+                      draggable={active && draft.mode === "place"}
+                      disabled={!active || draft.mode === "confirmPass"}
+                      aria-pressed={selected}
+                      aria-label={tile.face === null ? t.game.wild : String(tile.face)}
+                      onDragStart={(e) => e.dataTransfer.setData("text/plain", String(tile.id))}
+                      onClick={() => {
+                        if (draft.mode === "exchange") {
+                          update({
+                            swap: selected ? draft.swap.filter((id) => id !== tile.id) : [...draft.swap, tile.id],
+                          });
+                        } else {
+                          update({ selected: selected ? null : tile.id });
+                        }
+                      }}
+                    >
+                      <TileFace value={tile.face} wild={tile.face === null} />
+                    </button>
+                  );
+                })}
+                {draft.mode !== "exchange" &&
+                  placements.map((p) => <span key={`gap-${p.tileId}`} className="rack-slot empty" />)}
+              </div>
+            ) : (
+              <p className="muted">{t.game.spectator}</p>
+            )}
+            {canAct && (
+              <div className="actions">
+                {draft.mode === "place" && (
+                  <>
+                    <button
+                      type="button"
+                      className="btn primary"
+                      disabled={!active || !evaluation?.ok}
+                      onClick={() => submit({ type: "place", placements })}
+                    >
+                      {t.game.play}
+                    </button>
+                    {placements.length > 0 ? (
+                      <button type="button" className="btn" disabled={!active} onClick={() => setDraft(fresh())}>
+                        {t.game.recall}
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          className="btn"
+                          disabled={!active}
+                          onClick={() => update({ mode: "exchange", swap: [], selected: null })}
+                        >
+                          {t.game.exchange}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn"
+                          disabled={!active}
+                          onClick={() => update({ mode: "confirmPass", selected: null })}
+                        >
+                          {t.game.pass}
+                        </button>
+                      </>
+                    )}
+                  </>
+                )}
+                {draft.mode === "exchange" && (
+                  <>
+                    <button
+                      type="button"
+                      className="btn primary"
+                      disabled={!active || draft.swap.length === 0 || bagLow}
+                      onClick={() => submit({ type: "exchange", tileIds: draft.swap })}
+                    >
+                      {t.game.swap(draft.swap.length)}
+                    </button>
+                    <button type="button" className="btn" onClick={() => setDraft(fresh())}>
+                      {t.game.cancel}
+                    </button>
+                  </>
+                )}
+                {draft.mode === "confirmPass" && (
+                  <>
+                    <button type="button" className="btn primary" disabled={!active} onClick={() => submit({ type: "pass" })}>
+                      {t.game.pass}
+                    </button>
+                    <button type="button" className="btn" onClick={() => setDraft(fresh())}>
+                      {t.game.cancel}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
+      <section className="area-log panel">
+        <h3>{t.game.lastMoves}</h3>
+        <MoveLog view={view} />
+      </section>
+
+      {wildFor && (
+        <WildPicker
+          onPick={(value) => {
+            update({
+              placements: [...placements, { tileId: wildFor.tileId, cell: wildFor.cell, value }],
+              selected: null,
+            });
+            setWildFor(null);
+          }}
+          onCancel={() => setWildFor(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function MoveLog({ view }: { view: GameView }) {
+  const { t } = useI18n();
+  const entries = view.log.slice(-8).reverse();
+  if (entries.length === 0) return <p className="muted small">{t.game.noMoves}</p>;
+  return (
+    <ul className="log">
+      {entries.map((entry, i) => {
+        const name = view.players[entry.player]?.name ?? "";
+        if (entry.type === "place") {
+          return (
+            <li key={i}>
+              {t.log.place(name, entry.score)}
+              {entry.triolet && <span className="tag">Triolet</span>}
+              {entry.replay && <span className="tag">↻</span>}
+            </li>
+          );
+        }
+        return <li key={i} className="muted">{entry.type === "exchange" ? t.log.exchange(name, entry.count) : t.log.pass(name)}</li>;
+      })}
+    </ul>
+  );
+}
+
+function GameOver({ view, actions }: { view: GameView; actions?: ReactNode }) {
+  const { t } = useI18n();
+  const winners = (view.winners ?? []).map((i) => view.players[i].name);
+  return (
+    <div className="game-over">
+      <h2>{t.over.title}</h2>
+      <p className="winner">{winners.length === 1 ? t.over.winner(winners[0]) : t.over.tie(winners.join(", "))}</p>
+      <p className="muted">
+        {view.endReason === "out" && view.finalBonus
+          ? t.over.out(view.players[view.finalBonus.player].name, view.finalBonus.points)
+          : view.endReason === "blocked"
+            ? t.over.blocked
+            : t.over.stalled}
+      </p>
+      {actions && <div className="actions">{actions}</div>}
+    </div>
+  );
+}
+
+function WildPicker({ onPick, onCancel }: { onPick: (value: number) => void; onCancel: () => void }) {
+  const { t } = useI18n();
+  return (
+    <div className="overlay" role="dialog" aria-modal="true" aria-labelledby="wild-title" onClick={onCancel}>
+      <div className="dialog-body card" onClick={(e) => e.stopPropagation()}>
+        <h2 id="wild-title">{t.game.wildTitle}</h2>
+        <p className="muted small">{t.game.wildHint}</p>
+        <div className="wild-grid">
+          {VALUES.map((v) => (
+            <button key={v} type="button" className="btn wild-value" onClick={() => onPick(v)}>
+              {v}
+            </button>
+          ))}
+        </div>
+        <div className="actions">
+          <button type="button" className="btn" onClick={onCancel}>
+            {t.game.cancel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
