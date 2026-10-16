@@ -88,6 +88,7 @@ const fr = {
       `${name} a posé son dernier jeton et récupère ${points}${NB}point${s(points)} des autres chevalets.`,
     blocked: "Plus aucun jeton ne peut être posé.",
     stalled: "Deux tours complets sans aucune pose.",
+    aside: `Jetons mis de côté au départ${NB}:`,
     rematch: "Revanche",
     newGame: "Nouvelle partie",
   },
@@ -163,7 +164,7 @@ const fr = {
     title: "Règles de Trios",
     goal: "Posez des jetons numérotés de 0 à 15 sur le plateau. Trois jetons alignés doivent toujours faire exactement 15.",
     items: [
-      "Chaque joueur a 3 jetons. Il y en a 81 numérotés et 2 jokers\u00a0; 3 jetons sont écartés au début sans être vus.",
+      "Chaque joueur a 3 jetons. Il y en a 81 numérotés et 2 jokers. Au début, 3 jetons sont mis de côté sans être vus. Ils ne servent pas et sont dévoilés à la fin de la partie.",
       "À votre tour, posez 1, 2 ou 3 jetons sur une même ligne ou colonne, sans trou, en touchant un jeton déjà posé. Le premier coup couvre l’étoile centrale.",
       "Deux jetons voisins font 15 au maximum. Trois jetons alignés font exactement 15. Jamais quatre jetons alignés.",
       "En début de partie (pendant le premier tour, et tant que le plateau compte moins de quatre jetons), il est interdit de former un carré de quatre jetons\u00a0: le jeu reste ainsi ouvert. Et jamais de carré de 3\u00a0×\u00a03 jetons, qui bloquerait la partie.",
@@ -257,6 +258,7 @@ const en: Messages = {
     out: (name, points) => `${name} played their last tile and collects ${points} point${es(points)} from the other racks.`,
     blocked: "No more tiles can be played.",
     stalled: "Two full rounds without a tile placed.",
+    aside: "Tiles set aside at the start:",
     rematch: "Rematch",
     newGame: "New game",
   },
@@ -332,7 +334,7 @@ const en: Messages = {
     title: "How to play Trios",
     goal: "Place tiles numbered 0 to 15 on the board. Any three tiles in a row must always add up to exactly 15.",
     items: [
-      "Everyone holds 3 tiles. There are 81 numbered tiles and 2 wilds; 3 tiles are set aside unseen at the start.",
+      "Everyone holds 3 tiles. There are 81 numbered tiles and 2 wilds. At the start, 3 tiles are set aside unseen. They stay out of play and are revealed when the game ends.",
       "On your turn, place 1, 2 or 3 tiles in one row or column, with no gaps, touching a tile already on the board. The first move covers the centre star.",
       "Two neighbouring tiles total 15 at most. Three in a row total exactly 15. Never four in a row.",
       "At the start (during the first round, and while fewer than four tiles are down), no move may form a square of four tiles, so the game stays open. And never a 3 × 3 square of tiles, which would block the game.",

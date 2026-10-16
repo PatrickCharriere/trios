@@ -21,6 +21,8 @@ export interface GameView {
   winners?: number[];
   /** Revealed once the game is over. */
   racks?: Tile[][];
+  /** The tiles set aside at the start, revealed once the game is over. */
+  aside?: Tile[];
 }
 
 const LOG_LIMIT = 30;
@@ -44,5 +46,6 @@ export function viewFor(state: GameState, seat: number | null): GameView {
     finalBonus: state.finalBonus,
     winners: state.winners,
     racks: over ? state.racks : undefined,
+    aside: over ? state.aside : undefined,
   };
 }

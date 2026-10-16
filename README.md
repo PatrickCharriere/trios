@@ -18,7 +18,7 @@ The look follows the physical game: a blue board with silver lines (the palette 
 
 The full rules are in the app (the **Règles / Rules** button). In short:
 
-- 81 tiles numbered 0 to 15 (nine 0s down to one 15) plus 2 wilds. Three tiles are set aside unseen; everyone holds 3.
+- 81 tiles numbered 0 to 15 (nine 0s down to one 15) plus 2 wilds. Three tiles are set aside unseen and never played (Trios reveals them on the end screen); everyone holds 3.
 - Place 1 to 3 tiles in one row or column, no gaps, touching the tiles already down. The first move covers the centre star, which counts double.
 - Two neighbouring tiles total 15 at most, three in a row total exactly 15, and four in a row is never allowed.
 - No square of four tiles (a 2 × 2 block) at the start of the game: not during the first round, and not with the first four tiles. And never a 3 × 3 block, which nothing could ever touch again.

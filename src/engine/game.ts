@@ -16,13 +16,15 @@ export function createGame(setup: PlayerSetup[], rng: Rng = Math.random): GameSt
   if (setup.length < MIN_PLAYERS || setup.length > MAX_PLAYERS) {
     throw new Error(`A game needs ${MIN_PLAYERS} to ${MAX_PLAYERS} players`);
   }
-  // Three tiles go back in the box unseen, so nobody can count the bag exactly.
-  const bag = shuffle(makeTileSet(), rng).slice(SET_ASIDE);
+  // Three tiles are set aside unseen, so nobody can count the bag exactly.
+  const bag = shuffle(makeTileSet(), rng);
+  const aside = bag.splice(0, SET_ASIDE);
   const racks = setup.map(() => bag.splice(bag.length - RACK_SIZE, RACK_SIZE));
   return {
     version: 0,
     board: Array(CELL_COUNT).fill(null),
     bag,
+    aside,
     racks,
     players: setup.map((p) => ({ ...p, score: 0 })),
     current: Math.floor(rng() * setup.length),
