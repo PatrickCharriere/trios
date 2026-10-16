@@ -18,20 +18,17 @@ export function neighbours(cell: number): number[] {
 }
 
 /**
- * Special squares, given for one eighth of the board (row <= col <= 7) and
- * mirrored into the other seven. The official board's exact layout could not
- * be verified, so this is a balanced approximation: edit it here if your
- * physical board differs.
+ * Special squares of the physical board (as listed in the triolets project's
+ * Board.py), given for one eighth of the board (row <= col <= 7) and mirrored
+ * into the other seven: 8 play again, 8 triple and 8 double squares, plus the
+ * centre, which counts double.
  */
 const OCTANT: [number, number, Square][] = [
-  [0, 0, "triple"],
-  [0, 7, "triple"],
-  [5, 5, "triple"],
-  [2, 2, "double"],
+  [0, 7, "replay"],
+  [1, 1, "replay"],
+  [1, 4, "triple"],
   [3, 7, "double"],
-  [6, 6, "double"],
-  [2, 7, "replay"],
-  [4, 6, "replay"],
+  [4, 4, "double"],
 ];
 
 function buildLayout(): Square[] {

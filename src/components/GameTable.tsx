@@ -13,6 +13,7 @@ import {
 } from "@/engine";
 import { useI18n } from "@/i18n/I18nProvider";
 import { Board, type PendingTile } from "./Board";
+import { Modal } from "./Modal";
 import { TileFace } from "./TileFace";
 
 export interface GameTableProps {
@@ -58,8 +59,9 @@ export function GameTable({ view, canAct, waiting, notice, onMove, overActions }
   const rackLeft = view.rack.filter((tile) => !usedIds.has(tile.id));
 
   const evaluation = useMemo(
-    () => (placements.length ? evaluatePlacement(view.board, view.rack, placements) : null),
-    [view.board, view.rack, placements],
+    () =>
+      placements.length ? evaluatePlacement(view.board, view.rack, placements, { noSquares: view.firstRound }) : null,
+    [view.board, view.rack, view.firstRound, placements],
   );
 
   const pending = useMemo(() => {
@@ -157,7 +159,7 @@ export function GameTable({ view, canAct, waiting, notice, onMove, overActions }
                 {player.name}
                 {i === view.seat && <span className="muted"> ({t.game.you})</span>}
               </span>
-              <span className="dots" aria-label={t.game.tiles(view.rackCounts[i])}>
+              <span className="dots" role="img" aria-label={t.game.tiles(view.rackCounts[i])}>
                 {Array.from({ length: view.rackCounts[i] }, (_, k) => (
                   <span key={k} />
                 ))}
@@ -166,9 +168,7 @@ export function GameTable({ view, canAct, waiting, notice, onMove, overActions }
             </li>
           ))}
         </ul>
-        <p className="bag">
-          {t.game.bag}: {t.game.tiles(view.bagCount)}
-        </p>
+        <p className="bag">{t.game.bagCount(view.bagCount)}</p>
       </section>
 
       <section className="area-board">
@@ -193,13 +193,13 @@ export function GameTable({ view, canAct, waiting, notice, onMove, overActions }
 
       <section className="area-controls panel">
         {view.status === "over" ? (
-          <GameOver view={view} actions={overActions} />
+          <GameOver view={view} actions={overActions} notice={notice} />
         ) : (
           <>
             <p className="status" aria-live="polite">{statusLine}</p>
             {notice && <p className="notice">{notice}</p>}
             {view.seat !== null ? (
-              <div className="rack" aria-label={t.game.rack}>
+              <div className="rack" role="group" aria-label={t.game.rack}>
                 {(draft.mode === "exchange" ? view.rack : rackLeft).map((tile) => {
                   const selected =
                     draft.mode === "exchange" ? draft.swap.includes(tile.id) : draft.selected === tile.id;
@@ -346,13 +346,14 @@ function MoveLog({ view }: { view: GameView }) {
   );
 }
 
-function GameOver({ view, actions }: { view: GameView; actions?: ReactNode }) {
-  const { t } = useI18n();
+function GameOver({ view, actions, notice }: { view: GameView; actions?: ReactNode; notice?: string | null }) {
+  const { lang, t } = useI18n();
   const winners = (view.winners ?? []).map((i) => view.players[i].name);
+  const list = new Intl.ListFormat(lang, { type: "conjunction" }).format(winners);
   return (
-    <div className="game-over">
+    <div className="game-over" role="status">
       <h2>{t.over.title}</h2>
-      <p className="winner">{winners.length === 1 ? t.over.winner(winners[0]) : t.over.tie(winners.join(", "))}</p>
+      <p className="winner">{winners.length === 1 ? t.over.winner(winners[0]) : t.over.tie(list)}</p>
       <p className="muted">
         {view.endReason === "out" && view.finalBonus
           ? t.over.out(view.players[view.finalBonus.player].name, view.finalBonus.points)
@@ -360,6 +361,7 @@ function GameOver({ view, actions }: { view: GameView; actions?: ReactNode }) {
             ? t.over.blocked
             : t.over.stalled}
       </p>
+      {notice && <p className="notice">{notice}</p>}
       {actions && <div className="actions">{actions}</div>}
     </div>
   );
@@ -368,23 +370,20 @@ function GameOver({ view, actions }: { view: GameView; actions?: ReactNode }) {
 function WildPicker({ onPick, onCancel }: { onPick: (value: number) => void; onCancel: () => void }) {
   const { t } = useI18n();
   return (
-    <div className="overlay" role="dialog" aria-modal="true" aria-labelledby="wild-title" onClick={onCancel}>
-      <div className="dialog-body card" onClick={(e) => e.stopPropagation()}>
-        <h2 id="wild-title">{t.game.wildTitle}</h2>
-        <p className="muted small">{t.game.wildHint}</p>
-        <div className="wild-grid">
-          {VALUES.map((v) => (
-            <button key={v} type="button" className="btn wild-value" onClick={() => onPick(v)}>
-              {v}
-            </button>
-          ))}
-        </div>
-        <div className="actions">
-          <button type="button" className="btn" onClick={onCancel}>
-            {t.game.cancel}
+    <Modal title={t.game.wildTitle} onDismiss={onCancel} className="wild">
+      <p className="muted small">{t.game.wildHint}</p>
+      <div className="wild-grid">
+        {VALUES.map((v) => (
+          <button key={v} type="button" className="btn wild-value" onClick={() => onPick(v)}>
+            {v}
           </button>
-        </div>
+        ))}
       </div>
-    </div>
+      <div className="actions">
+        <button type="button" className="btn" onClick={onCancel}>
+          {t.game.cancel}
+        </button>
+      </div>
+    </Modal>
   );
 }

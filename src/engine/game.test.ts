@@ -7,6 +7,7 @@ import {
   cellAt,
   chooseMove,
   createGame,
+  inFirstRound,
   isBoardDead,
   seededRng,
   viewFor,
@@ -43,6 +44,18 @@ function assertBoardLegal(state: GameState) {
       flush();
     }
   }
+}
+
+/** Whether any size x size block of the board is fully covered. */
+function hasBlock(state: GameState, size: number) {
+  for (let r = 0; r + size <= BOARD_SIZE; r++) {
+    for (let c = 0; c + size <= BOARD_SIZE; c++) {
+      let full = true;
+      for (let dr = 0; dr < size && full; dr++) for (let dc = 0; dc < size && full; dc++) full = !!state.board[cellAt(r + dr, c + dc)];
+      if (full) return true;
+    }
+  }
+  return false;
 }
 
 describe("createGame", () => {
@@ -100,9 +113,9 @@ describe("applyMove", () => {
 
   it("lets a player go again after covering a replay square", () => {
     const state = opening();
-    state.board[cellAt(5, 6)] = { id: 950, value: 6, wild: false, player: 1, turn: 0 };
+    state.board[cellAt(2, 1)] = { id: 950, value: 6, wild: false, player: 1, turn: 0 };
     state.racks[0][0] = { id: 900, face: 2 };
-    const result = applyMove(state, 0, { type: "place", placements: [{ tileId: 900, cell: cellAt(4, 6) }] });
+    const result = applyMove(state, 0, { type: "place", placements: [{ tileId: 900, cell: cellAt(1, 1) }] });
     expect(result.ok && result.state.current).toBe(0);
   });
 
@@ -210,6 +223,61 @@ describe("applyMove", () => {
   });
 });
 
+describe("first round", () => {
+  it("forbids a square of four tiles until every player has had a turn", () => {
+    let state = createGame(two, seededRng(21));
+    state.current = 0;
+    state.racks[0] = [
+      { id: 900, face: 5 },
+      { id: 901, face: 4 },
+      { id: 902, face: 9 },
+    ];
+    state.racks[1] = [
+      { id: 910, face: 3 },
+      { id: 911, face: 2 },
+      { id: 912, face: 6 },
+    ];
+    const play = (player: number, placements: { tileId: number; cell: number }[]) =>
+      applyMove(state, player, { type: "place", placements });
+
+    // Ana opens with 5 and 4 across the centre.
+    let result = play(0, [
+      { tileId: 900, cell: CENTRE },
+      { tileId: 901, cell: CENTRE + 1 },
+    ]);
+    if (!result.ok) throw new Error(result.error);
+    state = result.state;
+
+    // Bob may not close a square under them yet...
+    const square = [
+      { tileId: 910, cell: CENTRE + BOARD_SIZE },
+      { tileId: 911, cell: CENTRE + BOARD_SIZE + 1 },
+    ];
+    expect(play(1, square)).toEqual({ ok: false, error: "earlySquare" });
+
+    // ...so he completes 6 + 5 + 4 and puts a 2 above the 6, which ends the first round.
+    result = play(1, [
+      { tileId: 912, cell: CENTRE - 1 },
+      { tileId: 911, cell: CENTRE - 1 - BOARD_SIZE },
+    ]);
+    if (!result.ok) throw new Error(result.error);
+    state = result.state;
+    expect(inFirstRound(state)).toBe(false);
+
+    // Now Ana may form the same square.
+    state.racks[0] = [
+      { id: 920, face: 3 },
+      { id: 921, face: 2 },
+    ];
+    expect(
+      play(0, [
+        { tileId: 920, cell: CENTRE + BOARD_SIZE },
+        { tileId: 921, cell: CENTRE + BOARD_SIZE + 1 },
+      ]).ok,
+    ).toBe(true);
+  });
+});
+
 describe("viewFor", () => {
   it("hides the other racks and the bag", () => {
     const state = createGame(two, seededRng(2));
@@ -237,10 +305,13 @@ describe("full games between bots", () => {
       for (let guard = 0; state.status === "playing"; guard++) {
         if (guard > 500) throw new Error("game did not finish");
         const p = state.current;
+        const opening = inFirstRound(state) || state.board.filter(Boolean).length < 4;
         const result = applyMove(state, p, chooseMove(state, p, state.players[p].level!, rng), rng);
         if (!result.ok) throw new Error(`bot made an illegal move: ${result.error}`);
         state = result.state;
         assertBoardLegal(state);
+        if (opening) expect(hasBlock(state, 2)).toBe(false);
+        expect(hasBlock(state, 3)).toBe(false);
         expect(tileCount(state)).toBe(total);
       }
       expect(state.winners!.length).toBeGreaterThan(0);

@@ -33,7 +33,7 @@ export function Header() {
           {t.switchToShort}
         </button>
       </nav>
-      <RulesDialog open={rulesOpen} onClose={() => setRulesOpen(false)} />
+      {rulesOpen && <RulesDialog onClose={() => setRulesOpen(false)} />}
     </header>
   );
 }

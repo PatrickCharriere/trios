@@ -56,6 +56,7 @@ export interface ScoredGroup {
   cells: number[];
   sum: number;
   trio: boolean;
+  /** Whole-group multiplier, only ever above 1 for a trio; in a pair the premium square multiplies just its own tile. */
   multiplier: number;
   points: number;
 }
@@ -112,5 +113,7 @@ export type RuleError =
   | "tooLong"
   | "pairOver"
   | "trioNot15"
+  | "earlySquare"
+  | "bigSquare"
   | "exchangeEmpty"
   | "exchangeBagLow";

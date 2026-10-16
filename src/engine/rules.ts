@@ -1,6 +1,6 @@
 import { BOARD_SIZE, CELL_COUNT, CENTRE, MAX_VALUE, RACK_SIZE, TARGET, TRIOLET_BONUS, TRIO_BONUS } from "./types";
-import type { PlacedTile, Placement, RuleError, ScoredGroup, Tile } from "./types";
-import { LAYOUT, colOf, multiplierOf, neighbours, rowOf } from "./board";
+import type { GameState, PlacedTile, Placement, RuleError, ScoredGroup, Tile } from "./types";
+import { LAYOUT, cellAt, colOf, multiplierOf, neighbours, rowOf } from "./board";
 
 export type Evaluation =
   | {
@@ -18,6 +18,37 @@ type Board = readonly (PlacedTile | null)[];
 const fail = (error: RuleError, cells?: number[]): Evaluation => ({ ok: false, error, cells });
 
 export const isBoardEmpty = (board: Board) => board.every((t) => t === null);
+
+/** Rules that depend on the state of the game rather than on the board alone. */
+export interface PlacementRules {
+  /** Precomputed isBoardEmpty(board), to save work in the move generator. */
+  boardEmpty?: boolean;
+  /** The first round is on: no move may form a square (a 2x2 block) of tiles. */
+  noSquares?: boolean;
+}
+
+/**
+ * The first round lasts until every player has had a turn; a play again turn
+ * doesn't end it. Gigamic's rules: "Lors du premier tour, il est interdit de
+ * former un carré avec les premiers jetons", to keep the game open.
+ */
+export const inFirstRound = (state: Pick<GameState, "log" | "players">) =>
+  new Set(state.log.map((entry) => entry.player)).size < state.players.length;
+
+/** A size x size block of occupied cells that includes one of `cells`, if any. */
+function blockThrough(cells: readonly number[], occupied: (cell: number) => boolean, size: number): number[] | null {
+  for (const cell of cells) {
+    for (let top = rowOf(cell) - size + 1; top <= rowOf(cell); top++) {
+      for (let left = colOf(cell) - size + 1; left <= colOf(cell); left++) {
+        if (top < 0 || left < 0 || top + size > BOARD_SIZE || left + size > BOARD_SIZE) continue;
+        const block: number[] = [];
+        for (let r = top; r < top + size; r++) for (let c = left; c < left + size; c++) block.push(cellAt(r, c));
+        if (block.every(occupied)) return block;
+      }
+    }
+  }
+  return null;
+}
 
 /** The maximal line of occupied cells through `cell`, in board order. */
 function runThrough(cell: number, horizontal: boolean, occupied: (cell: number) => boolean): number[] {
@@ -38,8 +69,9 @@ export function evaluatePlacement(
   board: Board,
   rack: readonly Tile[],
   placements: readonly Placement[],
-  boardEmpty = isBoardEmpty(board),
+  rules: PlacementRules = {},
 ): Evaluation {
+  const boardEmpty = rules.boardEmpty ?? isBoardEmpty(board);
   if (placements.length === 0) return fail("empty");
   if (placements.length > RACK_SIZE) return fail("tooMany");
 
@@ -71,6 +103,11 @@ export function evaluatePlacement(
   const cells = [...placed.keys()].sort((a, b) => a - b);
   const occupied = (cell: number) => placed.has(cell) || board[cell] !== null;
   const valueAt = (cell: number) => placed.get(cell)?.value ?? board[cell]?.value ?? 0;
+  // A wild counts its chosen value towards 15 but scores nothing ("sa valeur est nulle pour le comptage des points").
+  const pointsAt = (cell: number) => {
+    const tile = placed.get(cell) ?? board[cell];
+    return tile && !tile.wild ? tile.value : 0;
+  };
 
   if (cells.length > 1) {
     const sameRow = cells.every((c) => rowOf(c) === rowOf(cells[0]));
@@ -96,25 +133,45 @@ export function evaluatePlacement(
     }
   }
 
+  const sumOf = (run: number[]) => run.reduce((total, c) => total + valueAt(c), 0);
+  for (const run of runs.values()) {
+    if (run.length > 3) return fail("tooLong", run);
+    if (run.length === 2 && sumOf(run) > TARGET) return fail("pairOver", run);
+    if (run.length === 3 && sumOf(run) !== TARGET) return fail("trioNot15", run);
+  }
+
+  // Never a full 3x3 block: nothing could ever be placed beside it, so it
+  // would block the game ("il est interdit de former un carré de 3 par 3").
+  const bigSquare = blockThrough(cells, occupied, 3);
+  if (bigSquare) return fail("bigSquare", bigSquare);
+  // No 2x2 block at the start: in the first round (Gigamic) or with the first
+  // four tiles (tournament rules), whichever lasts longer.
+  const square = blockThrough(cells, occupied, 2);
+  if (square && (rules.noSquares || board.filter(Boolean).length < 4)) return fail("earlySquare", square);
+
+  // Premium squares only count for tiles placed this turn: a square used
+  // earlier is spent, even if a later tile completes a trio through it.
+  const squareOf = (c: number) => (placed.has(c) ? multiplierOf(LAYOUT[c]) : 1);
   const groups: ScoredGroup[] = [];
   for (const run of runs.values()) {
-    const sum = run.reduce((total, c) => total + valueAt(c), 0);
-    if (run.length > 3) return fail("tooLong", run);
-    if (run.length === 2 && sum > TARGET) return fail("pairOver", run);
-    if (run.length === 3 && sum !== TARGET) return fail("trioNot15", run);
-    const trio = run.length === 3;
-    const multiplier = run
-      .filter((c) => placed.has(c))
-      .reduce((m, c) => m * multiplierOf(LAYOUT[c]), 1);
-    groups.push({ cells: run, sum, trio, multiplier, points: (sum + (trio ? TRIO_BONUS : 0)) * multiplier });
+    const sum = sumOf(run);
+    if (run.length === 3) {
+      // A trio is always worth 15 plus the 15 bonus, wild or not, and a trio
+      // completed this turn is multiplied as a whole.
+      const multiplier = run.reduce((m, c) => m * squareOf(c), 1);
+      groups.push({ cells: run, sum, trio: true, multiplier, points: (TARGET + TRIO_BONUS) * multiplier });
+    } else {
+      // In a pair, a premium square only multiplies the tile sitting on it.
+      const points = run.reduce((total, c) => total + pointsAt(c) * squareOf(c), 0);
+      groups.push({ cells: run, sum, trio: false, multiplier: 1, points });
+    }
   }
 
   // A lone tile only happens on the opening move; it scores its own value.
   if (groups.length === 0) {
     const cell = cells[0];
     const multiplier = multiplierOf(LAYOUT[cell]);
-    const sum = valueAt(cell);
-    groups.push({ cells: [cell], sum, trio: false, multiplier, points: sum * multiplier });
+    groups.push({ cells: [cell], sum: valueAt(cell), trio: false, multiplier, points: pointsAt(cell) * multiplier });
   }
 
   const triolet =

@@ -76,10 +76,14 @@ export function upstashStore(url: string, token: string): Store {
     },
     async lock(id) {
       const key = lockKey(id);
+      const owner = crypto.randomUUID();
       for (let i = 0; i < LOCK_TRIES; i++) {
-        if ((await redis.set(key, "1", { nx: true, px: LOCK_MS })) === "OK") {
+        if ((await redis.set(key, owner, { nx: true, px: LOCK_MS })) === "OK") {
           return async () => {
-            await redis.del(key);
+            // Only release our own lock: if it expired during a slow request,
+            // someone else may hold it now. (Check then delete is not atomic,
+            // but the window is one round trip on a 5 second lock.)
+            if ((await redis.get<string>(key)) === owner) await redis.del(key);
           };
         }
         await pause(60 + Math.random() * 60);
