@@ -7,6 +7,7 @@ import {
   evaluatePlacement,
   generateMoves,
   hasAnyMove,
+  inFirstRound,
   makeTileSet,
   DISTRIBUTION,
   type PlacedTile,
@@ -220,6 +221,63 @@ describe("evaluatePlacement", () => {
       ]);
       expect(result).toMatchObject({ ok: true, triolet: false, score: 60 });
     });
+  });
+});
+
+describe("no square in the first round", () => {
+  const byNumber = (cells: number[]) => [...cells].sort((a, b) => a - b);
+
+  it("refuses two tiles that would close a square of four", () => {
+    const b = board({ [CENTRE]: 5, [at(C, C + 1)]: 4 });
+    const below = [
+      { tileId: 0, cell: at(C + 1, C) },
+      { tileId: 1, cell: at(C + 1, C + 1) },
+    ];
+    const result = evaluatePlacement(b, rack(3, 2), below, { noSquares: true });
+    expect(result).toMatchObject({ ok: false, error: "earlySquare" });
+    if (!result.ok) expect(byNumber(result.cells!)).toEqual(byNumber([CENTRE, at(C, C + 1), at(C + 1, C), at(C + 1, C + 1)]));
+    // The same move is fine once the first round is over.
+    expect(evaluatePlacement(b, rack(3, 2), below)).toMatchObject({ ok: true });
+  });
+
+  it("refuses a single tile that closes a square", () => {
+    const b = board({ [CENTRE]: 5, [at(C, C + 1)]: 4, [at(C + 1, C)]: 3 });
+    const result = evaluatePlacement(b, rack(2), [{ tileId: 0, cell: at(C + 1, C + 1) }], { noSquares: true });
+    expect(result).toMatchObject({ ok: false, error: "earlySquare" });
+  });
+
+  it("still allows lines and L shapes", () => {
+    const b = board({ [CENTRE]: 5, [at(C, C + 1)]: 4 });
+    expect(evaluatePlacement(b, rack(3), [{ tileId: 0, cell: at(C + 1, C) }], { noSquares: true })).toMatchObject({ ok: true });
+    expect(evaluatePlacement(b, rack(6), [{ tileId: 0, cell: at(C, C - 1) }], { noSquares: true })).toMatchObject({ ok: true });
+  });
+
+  it("keeps squares out of the generated moves", () => {
+    const b = board({ [CENTRE]: 5, [at(C, C + 1)]: 4 });
+    const forms = (cells: number[]) =>
+      cells.some((cell) =>
+        [-1, 0].some((dr) =>
+          [-1, 0].some((dc) => {
+            const top = Math.floor(cell / 15) + dr;
+            const left = (cell % 15) + dc;
+            const block = [at(top, left), at(top, left + 1), at(top + 1, left), at(top + 1, left + 1)];
+            return block.every((x) => cells.includes(x) || b[x] !== null);
+          }),
+        ),
+      );
+    const all = generateMoves(b, rack(3, 2, 1));
+    const opening = generateMoves(b, rack(3, 2, 1), { noSquares: true });
+    expect(all.some((m) => forms(m.evaluation.cells))).toBe(true);
+    expect(opening.some((m) => forms(m.evaluation.cells))).toBe(false);
+    expect(opening.length).toBeGreaterThan(0);
+  });
+
+  it("lasts until every player has had a turn, play again turns included", () => {
+    const players = ["Ana", "Bob", "Cy"].map((name) => ({ name, kind: "human" as const, score: 0 }));
+    const pass = (player: number) => ({ type: "pass" as const, player });
+    expect(inFirstRound({ players, log: [] })).toBe(true);
+    expect(inFirstRound({ players, log: [pass(0), pass(0), pass(1)] })).toBe(true);
+    expect(inFirstRound({ players, log: [pass(0), pass(1), pass(2)] })).toBe(false);
   });
 });
 

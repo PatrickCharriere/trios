@@ -1,7 +1,7 @@
 import { CELL_COUNT, EXCHANGE_MIN_BAG, MAX_PLAYERS, MIN_PLAYERS, RACK_SIZE, SCORELESS_ROUNDS, SET_ASIDE } from "./types";
 import type { BotLevel, EndReason, GameState, Move, RuleError } from "./types";
 import { makeTileSet, rackValue, shuffle, type Rng } from "./tiles";
-import { evaluatePlacement } from "./rules";
+import { evaluatePlacement, inFirstRound } from "./rules";
 import { hasAnyMove, isBoardDead } from "./movegen";
 
 export interface PlayerSetup {
@@ -64,7 +64,7 @@ export function applyMove(state: GameState, player: number, move: Move, rng: Rng
   let keepTurn = false;
 
   if (move.type === "place") {
-    const evaluation = evaluatePlacement(next.board, rack, move.placements);
+    const evaluation = evaluatePlacement(next.board, rack, move.placements, { noSquares: inFirstRound(state) });
     if (!evaluation.ok) return { ok: false, error: evaluation.error };
     for (const p of move.placements) {
       const [tile] = rack.splice(rack.findIndex((t) => t.id === p.tileId), 1);

@@ -2,6 +2,7 @@ import { EXCHANGE_MIN_BAG, MAX_VALUE, TARGET } from "./types";
 import type { BotLevel, GameState, Move, PlacedTile } from "./types";
 import { LAYOUT, cellAt, colOf, inBounds, multiplierOf, rowOf } from "./board";
 import { generateMoves, type Candidate } from "./movegen";
+import { inFirstRound } from "./rules";
 import type { Rng } from "./tiles";
 
 /**
@@ -52,7 +53,7 @@ function fallback(state: GameState, player: number): Move {
 }
 
 export function chooseMove(state: GameState, player: number, level: BotLevel, rng: Rng = Math.random): Move {
-  const moves = generateMoves(state.board, state.racks[player]);
+  const moves = generateMoves(state.board, state.racks[player], { noSquares: inFirstRound(state) });
   if (moves.length === 0) return fallback(state, player);
 
   const rate = (c: Candidate) => {

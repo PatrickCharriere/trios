@@ -7,6 +7,7 @@ import {
   cellAt,
   chooseMove,
   createGame,
+  inFirstRound,
   isBoardDead,
   seededRng,
   viewFor,
@@ -43,6 +44,16 @@ function assertBoardLegal(state: GameState) {
       flush();
     }
   }
+}
+
+/** Whether any 2x2 block of the board is fully covered. */
+function hasSquare(state: GameState) {
+  for (let r = 0; r < BOARD_SIZE - 1; r++) {
+    for (let c = 0; c < BOARD_SIZE - 1; c++) {
+      if ([cellAt(r, c), cellAt(r, c + 1), cellAt(r + 1, c), cellAt(r + 1, c + 1)].every((x) => state.board[x])) return true;
+    }
+  }
+  return false;
 }
 
 describe("createGame", () => {
@@ -210,6 +221,58 @@ describe("applyMove", () => {
   });
 });
 
+describe("first round", () => {
+  it("forbids a square of four tiles until every player has had a turn", () => {
+    let state = createGame(two, seededRng(21));
+    state.current = 0;
+    state.racks[0] = [
+      { id: 900, face: 5 },
+      { id: 901, face: 4 },
+      { id: 902, face: 9 },
+    ];
+    state.racks[1] = [
+      { id: 910, face: 3 },
+      { id: 911, face: 2 },
+      { id: 912, face: 6 },
+    ];
+    const play = (player: number, placements: { tileId: number; cell: number }[]) =>
+      applyMove(state, player, { type: "place", placements });
+
+    // Ana opens with 5 and 4 across the centre.
+    let result = play(0, [
+      { tileId: 900, cell: CENTRE },
+      { tileId: 901, cell: CENTRE + 1 },
+    ]);
+    if (!result.ok) throw new Error(result.error);
+    state = result.state;
+
+    // Bob may not close a square under them yet...
+    const square = [
+      { tileId: 910, cell: CENTRE + BOARD_SIZE },
+      { tileId: 911, cell: CENTRE + BOARD_SIZE + 1 },
+    ];
+    expect(play(1, square)).toEqual({ ok: false, error: "earlySquare" });
+
+    // ...so he completes 6 + 5 + 4 instead, which ends the first round.
+    result = play(1, [{ tileId: 912, cell: CENTRE - 1 }]);
+    if (!result.ok) throw new Error(result.error);
+    state = result.state;
+    expect(inFirstRound(state)).toBe(false);
+
+    // Now Ana may form the same square.
+    state.racks[0] = [
+      { id: 920, face: 3 },
+      { id: 921, face: 2 },
+    ];
+    expect(
+      play(0, [
+        { tileId: 920, cell: CENTRE + BOARD_SIZE },
+        { tileId: 921, cell: CENTRE + BOARD_SIZE + 1 },
+      ]).ok,
+    ).toBe(true);
+  });
+});
+
 describe("viewFor", () => {
   it("hides the other racks and the bag", () => {
     const state = createGame(two, seededRng(2));
@@ -237,10 +300,12 @@ describe("full games between bots", () => {
       for (let guard = 0; state.status === "playing"; guard++) {
         if (guard > 500) throw new Error("game did not finish");
         const p = state.current;
+        const opening = inFirstRound(state);
         const result = applyMove(state, p, chooseMove(state, p, state.players[p].level!, rng), rng);
         if (!result.ok) throw new Error(`bot made an illegal move: ${result.error}`);
         state = result.state;
         assertBoardLegal(state);
+        if (opening) expect(hasSquare(state)).toBe(false);
         expect(tileCount(state)).toBe(total);
       }
       expect(state.winners!.length).toBeGreaterThan(0);

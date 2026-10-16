@@ -150,6 +150,7 @@ describe("online game history", () => {
           current: 1,
           turn: 0,
           status: "playing",
+          firstRound: true,
           log: [],
         },
       }),

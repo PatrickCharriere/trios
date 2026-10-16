@@ -20,7 +20,7 @@ async function rejects(promise: Promise<unknown>, code: string) {
 
 function anyMove(snap: Snapshot) {
   const view = snap.view!;
-  const [candidate] = generateMoves(view.board, view.rack, 1);
+  const [candidate] = generateMoves(view.board, view.rack, { limit: 1 });
   return { type: "place" as const, placements: candidate.placements };
 }
 

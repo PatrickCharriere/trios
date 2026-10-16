@@ -1,4 +1,5 @@
 import type { EndReason, GameState, LogEntry, PlacedTile, Player, Tile } from "./types";
+import { inFirstRound } from "./rules";
 
 /** What one seat is allowed to see: other racks and the bag order stay hidden. */
 export interface GameView {
@@ -12,6 +13,8 @@ export interface GameView {
   current: number;
   turn: number;
   status: GameState["status"];
+  /** No square of four tiles may be formed until everyone has had a turn. */
+  firstRound: boolean;
   log: LogEntry[];
   endReason?: EndReason;
   finalBonus?: GameState["finalBonus"];
@@ -35,6 +38,7 @@ export function viewFor(state: GameState, seat: number | null): GameView {
     current: state.current,
     turn: state.turn,
     status: state.status,
+    firstRound: inFirstRound(state),
     log: state.log.slice(-LOG_LIMIT),
     endReason: state.endReason,
     finalBonus: state.finalBonus,

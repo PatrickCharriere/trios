@@ -1,6 +1,6 @@
 import { BOARD_SIZE, CELL_COUNT, CENTRE, MAX_VALUE, RACK_SIZE, TARGET, TRIOLET_BONUS, TRIO_BONUS } from "./types";
-import type { PlacedTile, Placement, RuleError, ScoredGroup, Tile } from "./types";
-import { LAYOUT, colOf, multiplierOf, neighbours, rowOf } from "./board";
+import type { GameState, PlacedTile, Placement, RuleError, ScoredGroup, Tile } from "./types";
+import { LAYOUT, cellAt, colOf, multiplierOf, neighbours, rowOf } from "./board";
 
 export type Evaluation =
   | {
@@ -18,6 +18,36 @@ type Board = readonly (PlacedTile | null)[];
 const fail = (error: RuleError, cells?: number[]): Evaluation => ({ ok: false, error, cells });
 
 export const isBoardEmpty = (board: Board) => board.every((t) => t === null);
+
+/** Rules that depend on the state of the game rather than on the board alone. */
+export interface PlacementRules {
+  /** Precomputed isBoardEmpty(board), to save work in the move generator. */
+  boardEmpty?: boolean;
+  /** During the first round no move may form a square (a 2x2 block) of tiles. */
+  noSquares?: boolean;
+}
+
+/**
+ * The first round lasts until every player has had a turn; a play again turn
+ * doesn't end it. Gigamic's rules: "Lors du premier tour, il est interdit de
+ * former un carré avec les premiers jetons", to keep the game open.
+ */
+export const inFirstRound = (state: Pick<GameState, "log" | "players">) =>
+  new Set(state.log.map((entry) => entry.player)).size < state.players.length;
+
+/** A 2x2 block of occupied cells that includes one of `cells`, if any. */
+function squareThrough(cells: readonly number[], occupied: (cell: number) => boolean): number[] | null {
+  for (const cell of cells) {
+    for (const top of [rowOf(cell) - 1, rowOf(cell)]) {
+      for (const left of [colOf(cell) - 1, colOf(cell)]) {
+        if (top < 0 || left < 0 || top + 1 >= BOARD_SIZE || left + 1 >= BOARD_SIZE) continue;
+        const block = [cellAt(top, left), cellAt(top, left + 1), cellAt(top + 1, left), cellAt(top + 1, left + 1)];
+        if (block.every(occupied)) return block;
+      }
+    }
+  }
+  return null;
+}
 
 /** The maximal line of occupied cells through `cell`, in board order. */
 function runThrough(cell: number, horizontal: boolean, occupied: (cell: number) => boolean): number[] {
@@ -38,8 +68,9 @@ export function evaluatePlacement(
   board: Board,
   rack: readonly Tile[],
   placements: readonly Placement[],
-  boardEmpty = isBoardEmpty(board),
+  rules: PlacementRules = {},
 ): Evaluation {
+  const boardEmpty = rules.boardEmpty ?? isBoardEmpty(board);
   if (placements.length === 0) return fail("empty");
   if (placements.length > RACK_SIZE) return fail("tooMany");
 
@@ -94,6 +125,11 @@ export function evaluatePlacement(
       const run = runThrough(cell, horizontal, occupied);
       if (run.length >= 2) runs.set(`${horizontal ? "h" : "v"}${run[0]}`, run);
     }
+  }
+
+  if (rules.noSquares) {
+    const square = squareThrough(cells, occupied);
+    if (square) return fail("earlySquare", square);
   }
 
   // Premium squares only count for tiles placed this turn: a square used

@@ -59,8 +59,9 @@ export function GameTable({ view, canAct, waiting, notice, onMove, overActions }
   const rackLeft = view.rack.filter((tile) => !usedIds.has(tile.id));
 
   const evaluation = useMemo(
-    () => (placements.length ? evaluatePlacement(view.board, view.rack, placements) : null),
-    [view.board, view.rack, placements],
+    () =>
+      placements.length ? evaluatePlacement(view.board, view.rack, placements, { noSquares: view.firstRound }) : null,
+    [view.board, view.rack, view.firstRound, placements],
   );
 
   const pending = useMemo(() => {

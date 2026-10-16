@@ -113,5 +113,6 @@ export type RuleError =
   | "tooLong"
   | "pairOver"
   | "trioNot15"
+  | "earlySquare"
   | "exchangeEmpty"
   | "exchangeBagLow";

@@ -1,7 +1,7 @@
 import { BOARD_SIZE, CELL_COUNT, CENTRE, MAX_VALUE, RACK_SIZE } from "./types";
 import type { PlacedTile, Placement, Tile } from "./types";
 import { neighbours, rowOf } from "./board";
-import { evaluatePlacement, isBoardEmpty, type Evaluation } from "./rules";
+import { evaluatePlacement, isBoardEmpty, type Evaluation, type PlacementRules } from "./rules";
 
 export interface Candidate {
   placements: Placement[];
@@ -46,8 +46,13 @@ function* arrangements(size: number, k: number, used: number[] = []): Generator<
 
 const WILD_VALUES = Array.from({ length: MAX_VALUE + 1 }, (_, v) => v);
 
-/** All legal placements for `rack`, stopping early once `limit` are found. */
-export function generateMoves(board: Board, rack: readonly Tile[], limit = Infinity): Candidate[] {
+export interface MoveSearch extends Omit<PlacementRules, "boardEmpty"> {
+  /** Stop once this many legal moves are found. */
+  limit?: number;
+}
+
+/** All legal placements for `rack`. */
+export function generateMoves(board: Board, rack: readonly Tile[], { limit = Infinity, ...rules }: MoveSearch = {}): Candidate[] {
   const boardEmpty = isBoardEmpty(board);
   const out: Candidate[] = [];
   const seen = new Set<string>();
@@ -67,7 +72,7 @@ export function generateMoves(board: Board, rack: readonly Tile[], limit = Infin
         const placements: Placement[] = cells.map((cell, i) =>
           tiles[i].face === null ? { tileId: tiles[i].id, cell, value: wildValue } : { tileId: tiles[i].id, cell },
         );
-        const evaluation = evaluatePlacement(board, rack, placements, boardEmpty);
+        const evaluation = evaluatePlacement(board, rack, placements, { ...rules, boardEmpty });
         if (evaluation.ok) {
           out.push({ placements, evaluation });
           if (out.length >= limit) return out;
@@ -78,8 +83,8 @@ export function generateMoves(board: Board, rack: readonly Tile[], limit = Infin
   return out;
 }
 
-export const hasAnyMove = (board: Board, rack: readonly Tile[]) =>
-  rack.length > 0 && generateMoves(board, rack, 1).length > 0;
+export const hasAnyMove = (board: Board, rack: readonly Tile[], rules: Omit<MoveSearch, "limit"> = {}) =>
+  rack.length > 0 && generateMoves(board, rack, { ...rules, limit: 1 }).length > 0;
 
 /**
  * True when no tile of any value fits anywhere. Checking single tiles is
@@ -91,7 +96,7 @@ export function isBoardDead(board: Board): boolean {
   for (let cell = 0; cell < CELL_COUNT; cell++) {
     if (board[cell] !== null || !neighbours(cell).some((n) => board[n] !== null)) continue;
     for (const value of WILD_VALUES) {
-      if (evaluatePlacement(board, probe, [{ tileId: -1, cell, value }], false).ok) return false;
+      if (evaluatePlacement(board, probe, [{ tileId: -1, cell, value }], { boardEmpty: false }).ok) return false;
     }
   }
   return true;
