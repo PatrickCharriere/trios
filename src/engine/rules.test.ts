@@ -236,8 +236,16 @@ describe("no square in the first round", () => {
     const result = evaluatePlacement(b, rack(3, 2), below, { noSquares: true });
     expect(result).toMatchObject({ ok: false, error: "earlySquare" });
     if (!result.ok) expect(byNumber(result.cells!)).toEqual(byNumber([CENTRE, at(C, C + 1), at(C + 1, C), at(C + 1, C + 1)]));
-    // The same move is fine once the first round is over.
-    expect(evaluatePlacement(b, rack(3, 2), below)).toMatchObject({ ok: true });
+    // The same move is fine once the first round is over and four tiles are down.
+    const later = board({ [at(C, C - 1)]: 6, [CENTRE]: 5, [at(C, C + 1)]: 4, [at(C - 1, C - 1)]: 2 });
+    expect(evaluatePlacement(later, rack(3, 2), below)).toMatchObject({ ok: true });
+  });
+
+  it("refuses a square made of the first four tiles, even after the first round", () => {
+    // 5 on the star, then 4 and 2 in an L: a 3 would make the first four tiles a square.
+    const b = board({ [CENTRE]: 5, [at(C, C + 1)]: 4, [at(C + 1, C + 1)]: 2 });
+    const result = evaluatePlacement(b, rack(3), [{ tileId: 0, cell: at(C + 1, C) }]);
+    expect(result).toMatchObject({ ok: false, error: "earlySquare" });
   });
 
   it("refuses a single tile that closes a square", () => {
@@ -253,7 +261,7 @@ describe("no square in the first round", () => {
   });
 
   it("keeps squares out of the generated moves", () => {
-    const b = board({ [CENTRE]: 5, [at(C, C + 1)]: 4 });
+    const b = board({ [at(C, C - 1)]: 6, [CENTRE]: 5, [at(C, C + 1)]: 4, [at(C - 1, C - 1)]: 2 });
     const forms = (cells: number[]) =>
       cells.some((cell) =>
         [-1, 0].some((dr) =>
@@ -278,6 +286,54 @@ describe("no square in the first round", () => {
     expect(inFirstRound({ players, log: [] })).toBe(true);
     expect(inFirstRound({ players, log: [pass(0), pass(0), pass(1)] })).toBe(true);
     expect(inFirstRound({ players, log: [pass(0), pass(1), pass(2)] })).toBe(false);
+  });
+});
+
+describe("no 3 x 3 square", () => {
+  // Every row and column of this block makes 15, so only the square rule stops the last tile.
+  const nearlyFull = () =>
+    board({
+      [at(6, 6)]: 0, [at(6, 7)]: 7, [at(6, 8)]: 8,
+      [at(7, 6)]: 7, [at(7, 7)]: 8, [at(7, 8)]: 0,
+      [at(8, 6)]: 8, [at(8, 7)]: 0,
+    });
+
+  it("refuses the tile that would fill a 3 x 3 block", () => {
+    const result = evaluatePlacement(nearlyFull(), rack(7), [{ tileId: 0, cell: at(8, 8) }]);
+    expect(result).toMatchObject({ ok: false, error: "bigSquare" });
+    if (!result.ok) expect(result.cells).toHaveLength(9);
+  });
+
+  it("still reports a wrong sum first", () => {
+    const result = evaluatePlacement(nearlyFull(), rack(6), [{ tileId: 0, cell: at(8, 8) }]);
+    expect(result).toMatchObject({ ok: false, error: "trioNot15" });
+  });
+});
+
+describe("wild scoring", () => {
+  it("scores nothing for a wild in a pair", () => {
+    const b = board({ [CENTRE]: 5 });
+    const result = evaluatePlacement(b, rack(null), [{ tileId: 0, cell: at(C, C + 1), value: 9 }]);
+    // 5 + 9 = 14 is allowed, but only the 5 scores.
+    expect(result).toMatchObject({ ok: true, score: 5 });
+  });
+
+  it("scores nothing for a wild on a multiplier", () => {
+    const b = board({ [at(1, 5)]: 6 });
+    const result = evaluatePlacement(b, rack(null), [{ tileId: 0, cell: at(1, 4), value: 4 }]);
+    expect(LAYOUT[at(1, 4)]).toBe("triple");
+    expect(result).toMatchObject({ ok: true, score: 6 });
+  });
+
+  it("scores nothing for a lone opening wild", () => {
+    const result = evaluatePlacement(board(), rack(null), [{ tileId: 0, cell: CENTRE, value: 7 }]);
+    expect(result).toMatchObject({ ok: true, score: 0 });
+  });
+
+  it("still makes a trio worth 30, tripled on a triple square", () => {
+    const b = board({ [at(1, 5)]: 6, [at(1, 6)]: 5 });
+    const result = evaluatePlacement(b, rack(null), [{ tileId: 0, cell: at(1, 4), value: 4 }]);
+    expect(result).toMatchObject({ ok: true, score: 90 });
   });
 });
 

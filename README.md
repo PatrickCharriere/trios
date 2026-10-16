@@ -21,8 +21,9 @@ The full rules are in the app (the **Règles / Rules** button). In short:
 - 81 tiles numbered 0 to 15 (nine 0s down to one 15) plus 2 wilds. Three tiles are set aside unseen; everyone holds 3.
 - Place 1 to 3 tiles in one row or column, no gaps, touching the tiles already down. The first move covers the centre star, which counts double.
 - Two neighbouring tiles total 15 at most, three in a row total exactly 15, and four in a row is never allowed.
-- During the first round, no move may form a square of four tiles (a 2 × 2 block), so the game stays open.
+- No square of four tiles (a 2 × 2 block) at the start of the game: not during the first round, and not with the first four tiles. And never a 3 × 3 block, which nothing could ever touch again.
 - Each group of 2 or 3 you create or complete scores its sum. A trio scores 15 plus a 15 bonus, so 30. A single opening tile scores its own value.
+- A wild takes the value you choose for the rest of the game but scores nothing: in a pair only the other tile counts, and a trio with a wild is still worth 30.
 - Yellow ×2 and red ×3 squares multiply the tile you place on them. If that tile completes a trio, the whole trio is multiplied, bonus included (a trio on a ×3 is worth 90). Each square works once: if its tile was placed on an earlier turn, a trio completed later through it isn't multiplied. The centre star counts as a ×2.
 - A **Triolet** (all 3 rack tiles placed at once as a trio) earns 50 more points, never multiplied, and not with a wild.
 - A **play again** square gives you another turn.
@@ -35,10 +36,12 @@ The official rulebook PDFs weren't reachable while building this, so some detail
 | Point | What Trios does | Why |
 | --- | --- | --- |
 | Special square positions | 8 ×2 plus the centre, 8 ×3 and 8 play again squares (`board.ts`) | Taken from the physical board as listed in the `triolets` project's `Board.py`; a test checks every square. |
-| Wild value | Counts its chosen value on the board (a trio with a wild is still 30), but 0 if left on a rack at the end | Gigamic's English rules say the trio is still 30; French sources say a wild is worth nothing at the final count. This reading satisfies both. |
-| Exchanges | Allowed while at least 5 tiles remain in the bag | From one French source. |
-| No square in the first round | No move may create a 2 × 2 block of tiles until every player has had a turn; a play again turn doesn't end the round | Gigamic's rules say *"Lors du premier tour, il est interdit de former un carré avec les premiers jetons"*; another source words it as the first four tiles placed. Trios follows Gigamic's wording. |
+| Wild value | Counts its chosen value towards 15 but scores 0, so a pair with a wild scores only the other tile; a trio is still worth 30 | Gigamic's French rules say *"La valeur d'un Joker est nulle pour le comptage des points"* and *"Un Trio vaut donc toujours 30 points"*; the English rules agree that a trio with a wild is still 30. |
+| Exchanges | Allowed while at least 5 tiles remain in the bag | *"Cette action est autorisée tant qu'il reste au moins cinq jetons dans le sac"*. |
+| No square at the start | No move may create a 2 × 2 block until every player has had a turn (a play again turn doesn't end the round), nor while fewer than four tiles are down | Gigamic's rules say *"Lors du premier tour, il est interdit de former un carré avec les premiers jetons"*; the Mind Sports Olympiad tournament rules say "a 2x2 square is not permitted with the first 4 tiles". Trios applies both. |
+| No 3 × 3 square | No move may fill a 3 × 3 block, at any point in the game | Gigamic's rules: *"Ensuite il est interdit de former un carré de 3 par 3 qui bloquerait la partie"*. Another version only forbids it when the game couldn't continue; Trios applies the stricter Gigamic wording. |
 | Stuck games | The game ends when the bag is empty and nobody can play, when no tile of any value fits anywhere, or after two full rounds with no tile placed | Only the first is in the sources found. Without the other two, simulated games could loop forever on exchanges. |
+| Leftover tiles | Only the player who goes out gains anything: the value of the tiles left on the other racks. Nobody loses points for their own leftover tiles | Gigamic's current rules. An older edition and the tournament rules subtract each player's leftover tiles instead. |
 
 ## Deploying to Vercel
 

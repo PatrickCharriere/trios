@@ -114,5 +114,6 @@ export type RuleError =
   | "pairOver"
   | "trioNot15"
   | "earlySquare"
+  | "bigSquare"
   | "exchangeEmpty"
   | "exchangeBagLow";

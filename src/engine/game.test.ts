@@ -46,11 +46,13 @@ function assertBoardLegal(state: GameState) {
   }
 }
 
-/** Whether any 2x2 block of the board is fully covered. */
-function hasSquare(state: GameState) {
-  for (let r = 0; r < BOARD_SIZE - 1; r++) {
-    for (let c = 0; c < BOARD_SIZE - 1; c++) {
-      if ([cellAt(r, c), cellAt(r, c + 1), cellAt(r + 1, c), cellAt(r + 1, c + 1)].every((x) => state.board[x])) return true;
+/** Whether any size x size block of the board is fully covered. */
+function hasBlock(state: GameState, size: number) {
+  for (let r = 0; r + size <= BOARD_SIZE; r++) {
+    for (let c = 0; c + size <= BOARD_SIZE; c++) {
+      let full = true;
+      for (let dr = 0; dr < size && full; dr++) for (let dc = 0; dc < size && full; dc++) full = !!state.board[cellAt(r + dr, c + dc)];
+      if (full) return true;
     }
   }
   return false;
@@ -253,8 +255,11 @@ describe("first round", () => {
     ];
     expect(play(1, square)).toEqual({ ok: false, error: "earlySquare" });
 
-    // ...so he completes 6 + 5 + 4 instead, which ends the first round.
-    result = play(1, [{ tileId: 912, cell: CENTRE - 1 }]);
+    // ...so he completes 6 + 5 + 4 and puts a 2 above the 6, which ends the first round.
+    result = play(1, [
+      { tileId: 912, cell: CENTRE - 1 },
+      { tileId: 911, cell: CENTRE - 1 - BOARD_SIZE },
+    ]);
     if (!result.ok) throw new Error(result.error);
     state = result.state;
     expect(inFirstRound(state)).toBe(false);
@@ -300,12 +305,13 @@ describe("full games between bots", () => {
       for (let guard = 0; state.status === "playing"; guard++) {
         if (guard > 500) throw new Error("game did not finish");
         const p = state.current;
-        const opening = inFirstRound(state);
+        const opening = inFirstRound(state) || state.board.filter(Boolean).length < 4;
         const result = applyMove(state, p, chooseMove(state, p, state.players[p].level!, rng), rng);
         if (!result.ok) throw new Error(`bot made an illegal move: ${result.error}`);
         state = result.state;
         assertBoardLegal(state);
-        if (opening) expect(hasSquare(state)).toBe(false);
+        if (opening) expect(hasBlock(state, 2)).toBe(false);
+        expect(hasBlock(state, 3)).toBe(false);
         expect(tileCount(state)).toBe(total);
       }
       expect(state.winners!.length).toBeGreaterThan(0);

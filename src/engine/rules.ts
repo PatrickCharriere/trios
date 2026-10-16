@@ -23,7 +23,7 @@ export const isBoardEmpty = (board: Board) => board.every((t) => t === null);
 export interface PlacementRules {
   /** Precomputed isBoardEmpty(board), to save work in the move generator. */
   boardEmpty?: boolean;
-  /** During the first round no move may form a square (a 2x2 block) of tiles. */
+  /** The first round is on: no move may form a square (a 2x2 block) of tiles. */
   noSquares?: boolean;
 }
 
@@ -35,13 +35,14 @@ export interface PlacementRules {
 export const inFirstRound = (state: Pick<GameState, "log" | "players">) =>
   new Set(state.log.map((entry) => entry.player)).size < state.players.length;
 
-/** A 2x2 block of occupied cells that includes one of `cells`, if any. */
-function squareThrough(cells: readonly number[], occupied: (cell: number) => boolean): number[] | null {
+/** A size x size block of occupied cells that includes one of `cells`, if any. */
+function blockThrough(cells: readonly number[], occupied: (cell: number) => boolean, size: number): number[] | null {
   for (const cell of cells) {
-    for (const top of [rowOf(cell) - 1, rowOf(cell)]) {
-      for (const left of [colOf(cell) - 1, colOf(cell)]) {
-        if (top < 0 || left < 0 || top + 1 >= BOARD_SIZE || left + 1 >= BOARD_SIZE) continue;
-        const block = [cellAt(top, left), cellAt(top, left + 1), cellAt(top + 1, left), cellAt(top + 1, left + 1)];
+    for (let top = rowOf(cell) - size + 1; top <= rowOf(cell); top++) {
+      for (let left = colOf(cell) - size + 1; left <= colOf(cell); left++) {
+        if (top < 0 || left < 0 || top + size > BOARD_SIZE || left + size > BOARD_SIZE) continue;
+        const block: number[] = [];
+        for (let r = top; r < top + size; r++) for (let c = left; c < left + size; c++) block.push(cellAt(r, c));
         if (block.every(occupied)) return block;
       }
     }
@@ -102,6 +103,11 @@ export function evaluatePlacement(
   const cells = [...placed.keys()].sort((a, b) => a - b);
   const occupied = (cell: number) => placed.has(cell) || board[cell] !== null;
   const valueAt = (cell: number) => placed.get(cell)?.value ?? board[cell]?.value ?? 0;
+  // A wild counts its chosen value towards 15 but scores nothing ("sa valeur est nulle pour le comptage des points").
+  const pointsAt = (cell: number) => {
+    const tile = placed.get(cell) ?? board[cell];
+    return tile && !tile.wild ? tile.value : 0;
+  };
 
   if (cells.length > 1) {
     const sameRow = cells.every((c) => rowOf(c) === rowOf(cells[0]));
@@ -127,27 +133,36 @@ export function evaluatePlacement(
     }
   }
 
-  if (rules.noSquares) {
-    const square = squareThrough(cells, occupied);
-    if (square) return fail("earlySquare", square);
+  const sumOf = (run: number[]) => run.reduce((total, c) => total + valueAt(c), 0);
+  for (const run of runs.values()) {
+    if (run.length > 3) return fail("tooLong", run);
+    if (run.length === 2 && sumOf(run) > TARGET) return fail("pairOver", run);
+    if (run.length === 3 && sumOf(run) !== TARGET) return fail("trioNot15", run);
   }
+
+  // Never a full 3x3 block: nothing could ever be placed beside it, so it
+  // would block the game ("il est interdit de former un carré de 3 par 3").
+  const bigSquare = blockThrough(cells, occupied, 3);
+  if (bigSquare) return fail("bigSquare", bigSquare);
+  // No 2x2 block at the start: in the first round (Gigamic) or with the first
+  // four tiles (tournament rules), whichever lasts longer.
+  const square = blockThrough(cells, occupied, 2);
+  if (square && (rules.noSquares || board.filter(Boolean).length < 4)) return fail("earlySquare", square);
 
   // Premium squares only count for tiles placed this turn: a square used
   // earlier is spent, even if a later tile completes a trio through it.
   const squareOf = (c: number) => (placed.has(c) ? multiplierOf(LAYOUT[c]) : 1);
   const groups: ScoredGroup[] = [];
   for (const run of runs.values()) {
-    const sum = run.reduce((total, c) => total + valueAt(c), 0);
-    if (run.length > 3) return fail("tooLong", run);
-    if (run.length === 2 && sum > TARGET) return fail("pairOver", run);
-    if (run.length === 3 && sum !== TARGET) return fail("trioNot15", run);
+    const sum = sumOf(run);
     if (run.length === 3) {
-      // A trio completed this turn is multiplied as a whole, bonus included.
+      // A trio is always worth 15 plus the 15 bonus, wild or not, and a trio
+      // completed this turn is multiplied as a whole.
       const multiplier = run.reduce((m, c) => m * squareOf(c), 1);
-      groups.push({ cells: run, sum, trio: true, multiplier, points: (sum + TRIO_BONUS) * multiplier });
+      groups.push({ cells: run, sum, trio: true, multiplier, points: (TARGET + TRIO_BONUS) * multiplier });
     } else {
       // In a pair, a premium square only multiplies the tile sitting on it.
-      const points = run.reduce((total, c) => total + valueAt(c) * squareOf(c), 0);
+      const points = run.reduce((total, c) => total + pointsAt(c) * squareOf(c), 0);
       groups.push({ cells: run, sum, trio: false, multiplier: 1, points });
     }
   }
@@ -156,8 +171,7 @@ export function evaluatePlacement(
   if (groups.length === 0) {
     const cell = cells[0];
     const multiplier = multiplierOf(LAYOUT[cell]);
-    const sum = valueAt(cell);
-    groups.push({ cells: [cell], sum, trio: false, multiplier, points: sum * multiplier });
+    groups.push({ cells: [cell], sum: valueAt(cell), trio: false, multiplier, points: pointsAt(cell) * multiplier });
   }
 
   const triolet =
