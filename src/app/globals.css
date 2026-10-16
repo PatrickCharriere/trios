@@ -701,6 +701,22 @@ input {
   font-weight: 800;
 }
 
+.set-aside {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.set-aside-tiles {
+  display: flex;
+  gap: 8px;
+}
+
+.set-aside-tiles .token {
+  width: 48px;
+  font-size: 22px;
+}
+
 /* Overlays and dialogs */
 
 

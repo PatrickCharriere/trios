@@ -3,6 +3,7 @@ import {
   BOARD_SIZE,
   CELL_COUNT,
   CENTRE,
+  SET_ASIDE,
   applyMove,
   cellAt,
   chooseMove,
@@ -62,7 +63,11 @@ describe("createGame", () => {
   it("deals three tiles each and sets three aside", () => {
     const state = createGame(two, seededRng(1));
     expect(state.racks.map((r) => r.length)).toEqual([3, 3]);
+    expect(state.aside).toHaveLength(SET_ASIDE);
     expect(state.bag).toHaveLength(83 - 3 - 6);
+    // Every tile is in exactly one place: the bag, a rack or the tiles set aside.
+    const ids = [...state.bag, ...state.racks.flat(), ...state.aside!].map((t) => t.id).sort((a, b) => a - b);
+    expect(ids).toEqual(Array.from({ length: 83 }, (_, i) => i));
     expect(state.board).toHaveLength(CELL_COUNT);
     expect(state.status).toBe("playing");
   });
@@ -287,6 +292,16 @@ describe("viewFor", () => {
     expect(view.bagCount).toBe(state.bag.length);
     expect(JSON.stringify(view)).not.toContain('"bag"');
     expect(view.racks).toBeUndefined();
+    expect(view.aside).toBeUndefined();
+  });
+
+  it("shows the tiles set aside once the game is over", () => {
+    const state = createGame(two, seededRng(2));
+    const over: GameState = { ...state, status: "over" };
+    expect(viewFor(over, 0).aside).toEqual(state.aside);
+    expect(viewFor(over, null).aside).toHaveLength(SET_ASIDE);
+    // Games saved before the tiles were kept have nothing to show.
+    expect(viewFor({ ...over, aside: undefined }, 0).aside).toBeUndefined();
   });
 });
 
@@ -316,6 +331,9 @@ describe("full games between bots", () => {
       }
       expect(state.winners!.length).toBeGreaterThan(0);
       expect(state.board.filter(Boolean).length).toBeGreaterThan(20);
+      // The tiles set aside never come into play.
+      const aside = new Set(state.aside!.map((t) => t.id));
+      expect(state.board.some((tile) => tile && aside.has(tile.id))).toBe(false);
     });
   }
 });

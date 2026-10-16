@@ -36,6 +36,8 @@ describe("online service", () => {
     // The guest sees how many tiles the host holds, never which ones.
     expect(JSON.stringify(guest.snapshot)).not.toContain(host.token);
     expect(guest.snapshot.view!.rackCounts).toEqual([3, 3]);
+    // The tiles set aside stay hidden until the game is over.
+    expect(guest.snapshot.view!.aside).toBeUndefined();
 
     await rejects(joinOnlineGame(host.id, "Cy", store), "started");
 

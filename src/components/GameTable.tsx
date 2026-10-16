@@ -361,6 +361,18 @@ function GameOver({ view, actions, notice }: { view: GameView; actions?: ReactNo
             ? t.over.blocked
             : t.over.stalled}
       </p>
+      {view.aside && view.aside.length > 0 && (
+        <div className="set-aside">
+          <p className="muted small">{t.over.aside}</p>
+          <div className="set-aside-tiles">
+            {view.aside.map((tile) => (
+              <span key={tile.id} role="img" aria-label={tile.face === null ? t.game.wild : String(tile.face)}>
+                <TileFace value={tile.face} wild={tile.face === null} />
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
       {notice && <p className="notice">{notice}</p>}
       {actions && <div className="actions">{actions}</div>}
     </div>

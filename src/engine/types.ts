@@ -80,6 +80,11 @@ export interface GameState {
   version: number;
   board: (PlacedTile | null)[];
   bag: Tile[];
+  /**
+   * The tiles set aside unseen at the start. They are never played and are
+   * only shown once the game is over. Missing from games saved before they were kept.
+   */
+  aside?: Tile[];
   racks: Tile[][];
   players: Player[];
   current: number;
