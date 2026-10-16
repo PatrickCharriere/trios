@@ -61,6 +61,9 @@ function readSeats(): Record<string, SavedSeat> {
 
 export const loadSeat = (id: string): SavedSeat | null => readSeats()[id] ?? null;
 
+/** Every online game this browser holds a seat in. */
+export const listSeatIds = (): string[] => Object.keys(readSeats());
+
 export function saveSeat(id: string, seat: SavedSeat) {
   memorySeats[id] = seat;
   try {

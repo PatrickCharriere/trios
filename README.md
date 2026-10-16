@@ -10,7 +10,9 @@ A number tile game where every line of three must add up to exactly 15. It's a w
 - **Pass and play:** two to four people on one device, with a hand-off screen so nobody sees the next player's tiles.
 - **Online with friends:** create a game, send the link, and play from separate devices. This needs a free Upstash Redis store (see below); the other two modes work without it.
 
-Games against the computer and pass-and-play games are saved in the browser, so a refresh doesn't lose them.
+Each section of the home page lists its games, in progress and finished, with their status (your turn, someone else's turn, won, lost, waiting for players), the scores and when they were last played. Tap a game to pick it up again, or remove it from the list. Games against the computer and pass-and-play games are stored in the browser: every game in progress, plus the 40 most recent finished ones. Online games are listed for the browser that created or joined them, and their status is refreshed from the server when the home page opens.
+
+The look follows the physical game: a blue board with silver lines (the palette from the `triolets` project), yellow ×2, red ×3 and orange play again squares as in the official rules, and square wooden tiles that show, like the real ones, how many tiles of that value the box holds.
 
 ## Rules
 
@@ -19,7 +21,8 @@ The full rules are in the app (the **Règles / Rules** button). In short:
 - 81 tiles numbered 0 to 15 (nine 0s down to one 15) plus 2 wilds. Three tiles are set aside unseen; everyone holds 3.
 - Place 1 to 3 tiles in one row or column, no gaps, touching the tiles already down. The first move covers the centre star, which counts double.
 - Two neighbouring tiles total 15 at most, three in a row total exactly 15, and four in a row is never allowed.
-- Each group of 2 or 3 you create or complete scores its sum. A trio scores 15 plus a 15 bonus, so 30. ×2 and ×3 squares multiply the groups through the tile you just put there. A single opening tile scores its own value, doubled by the star.
+- Each group of 2 or 3 you create or complete scores its sum. A trio scores 15 plus a 15 bonus, so 30. A single opening tile scores its own value.
+- Yellow ×2 and red ×3 squares multiply the tile you place on them. If that tile completes a trio, the whole trio is multiplied, bonus included (a trio on a ×3 is worth 90). Each square works once: if its tile was placed on an earlier turn, a trio completed later through it isn't multiplied. The centre star counts as a ×2.
 - A **Triolet** (all 3 rack tiles placed at once as a trio) earns 50 more points, never multiplied, and not with a wild.
 - A **play again** square gives you another turn.
 - The game ends when the bag is empty and someone plays their last tile. They collect the value of the tiles left on the other racks.
@@ -30,10 +33,9 @@ The official rulebook PDFs weren't reachable while building this, so some detail
 
 | Point | What Trios does | Why |
 | --- | --- | --- |
-| Special square positions | A symmetric layout of 12 ×2, 12 ×3 and 12 play again squares (`board.ts`) | The real layout couldn't be verified. Compare it with your physical board. |
+| Special square positions | 8 ×2 plus the centre, 8 ×3 and 8 play again squares (`board.ts`) | Taken from the physical board as listed in the `triolets` project's `Board.py`; a test checks every square. |
 | Wild value | Counts its chosen value on the board (a trio with a wild is still 30), but 0 if left on a rack at the end | Gigamic's English rules say the trio is still 30; French sources say a wild is worth nothing at the final count. This reading satisfies both. |
 | Exchanges | Allowed while at least 5 tiles remain in the bag | From one French source. |
-| Two premium squares in one group | Both apply (×2 and ×3 make ×6) | Same as Scrabble. Premiums only count on the turn a tile is placed. |
 | Stuck games | The game ends when the bag is empty and nobody can play, when no tile of any value fits anywhere, or after two full rounds with no tile placed | Only the first is in the sources found. Without the other two, simulated games could loop forever on exchanges. |
 
 ## Deploying to Vercel
@@ -63,7 +65,8 @@ Running a production build locally (`npm run build && npm start`) disables onlin
 
 - **Next.js 16, React 19 and TypeScript.** The only other runtime dependency is the Upstash client.
 - `src/engine/`: the game itself, pure TypeScript with no React: rules and scoring (`rules.ts`), game flow (`game.ts`), move generation (`movegen.ts`) and the computer opponent (`ai.ts`). The tests play whole bot games and check the board is legal after every move.
-- `src/components/`: the board, rack and game screens, shared by local and online play.
+- `src/components/`: the board, rack and game screens, shared by local and online play, and the home page lists.
+- `src/lib/history.ts`: the games stored in the browser and the summaries shown in the home page lists.
 - `src/lib/online/`: the online service. The server holds the full game; each player only receives their own rack. Moves are validated on the server, under a short lock so simultaneous requests can't clash.
 - `src/app/api/`: route handlers for creating, joining, polling and playing online games.
 - `src/i18n/`: French and English text.

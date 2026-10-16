@@ -96,17 +96,24 @@ export function evaluatePlacement(
     }
   }
 
+  // Premium squares only count for tiles placed this turn: a square used
+  // earlier is spent, even if a later tile completes a trio through it.
+  const squareOf = (c: number) => (placed.has(c) ? multiplierOf(LAYOUT[c]) : 1);
   const groups: ScoredGroup[] = [];
   for (const run of runs.values()) {
     const sum = run.reduce((total, c) => total + valueAt(c), 0);
     if (run.length > 3) return fail("tooLong", run);
     if (run.length === 2 && sum > TARGET) return fail("pairOver", run);
     if (run.length === 3 && sum !== TARGET) return fail("trioNot15", run);
-    const trio = run.length === 3;
-    const multiplier = run
-      .filter((c) => placed.has(c))
-      .reduce((m, c) => m * multiplierOf(LAYOUT[c]), 1);
-    groups.push({ cells: run, sum, trio, multiplier, points: (sum + (trio ? TRIO_BONUS : 0)) * multiplier });
+    if (run.length === 3) {
+      // A trio completed this turn is multiplied as a whole, bonus included.
+      const multiplier = run.reduce((m, c) => m * squareOf(c), 1);
+      groups.push({ cells: run, sum, trio: true, multiplier, points: (sum + TRIO_BONUS) * multiplier });
+    } else {
+      // In a pair, a premium square only multiplies the tile sitting on it.
+      const points = run.reduce((total, c) => total + valueAt(c) * squareOf(c), 0);
+      groups.push({ cells: run, sum, trio: false, multiplier: 1, points });
+    }
   }
 
   // A lone tile only happens on the opening move; it scores its own value.

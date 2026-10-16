@@ -100,9 +100,9 @@ describe("applyMove", () => {
 
   it("lets a player go again after covering a replay square", () => {
     const state = opening();
-    state.board[cellAt(5, 6)] = { id: 950, value: 6, wild: false, player: 1, turn: 0 };
+    state.board[cellAt(2, 1)] = { id: 950, value: 6, wild: false, player: 1, turn: 0 };
     state.racks[0][0] = { id: 900, face: 2 };
-    const result = applyMove(state, 0, { type: "place", placements: [{ tileId: 900, cell: cellAt(4, 6) }] });
+    const result = applyMove(state, 0, { type: "place", placements: [{ tileId: 900, cell: cellAt(1, 1) }] });
     expect(result.ok && result.state.current).toBe(0);
   });
 

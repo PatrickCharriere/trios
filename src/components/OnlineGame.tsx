@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Move, RuleError } from "@/engine";
 import { useI18n } from "@/i18n/I18nProvider";
 import { errorMessage } from "@/i18n/messages";
+import { markOnlineExpired, recordOnlineGame } from "@/lib/history";
 import { ApiFailure, api, loadName, loadSeat, saveName, saveSeat, type SavedSeat } from "@/lib/online/client";
 import { MAX_NAME, type Snapshot } from "@/lib/online/protocol";
 import { useHydrated } from "@/lib/useHydrated";
@@ -36,6 +37,7 @@ function OnlineGameLoaded({ id }: { id: string }) {
     rev.current = next.rev;
     setSnap(next);
     setNotice(null);
+    recordOnlineGame(next);
   };
 
   const view = snap?.view ?? null;
@@ -56,11 +58,13 @@ function OnlineGameLoaded({ id }: { id: string }) {
           if (!result.unchanged) {
             rev.current = result.snapshot.rev;
             setSnap(result.snapshot);
+            recordOnlineGame(result.snapshot);
           }
           setNotice(null);
         } catch (error) {
           if (stopped) return;
           if (error instanceof ApiFailure && (error.code === "notFound" || error.code === "unavailable")) {
+            if (error.code === "notFound") markOnlineExpired(id);
             setFatal(error.code);
             return;
           }

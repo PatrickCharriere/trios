@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { applyMove, chooseMove, createGame, viewFor, type Move } from "@/engine";
+import { applyMove, chooseMove, viewFor, type Move } from "@/engine";
 import { useI18n } from "@/i18n/I18nProvider";
-import { clearLocal, loadLocal, saveLocal, type LocalSave } from "@/lib/localGame";
+import { createLocalGame, loadLocalGame, saveLocalGame, type LocalGame as SavedGame } from "@/lib/history";
 import { useHydrated } from "@/lib/useHydrated";
 import { GameTable } from "./GameTable";
 import { Modal } from "./Modal";
@@ -13,18 +13,20 @@ import { Modal } from "./Modal";
 const BOT_DELAY_MS = 750;
 
 export function LocalGame() {
-  // The saved game lives in localStorage, so render nothing until in the browser.
-  return useHydrated() ? <LocalGameLoaded /> : <div className="loading" />;
+  const { id } = useParams<{ id: string }>();
+  // Saved games live in localStorage, so render nothing until in the browser.
+  // Keyed by id so opening another game starts from fresh state.
+  return useHydrated() ? <LocalGameLoaded key={id} id={id} /> : <div className="loading" />;
 }
 
-function LocalGameLoaded() {
+function LocalGameLoaded({ id }: { id: string }) {
   const { t } = useI18n();
   const router = useRouter();
-  const [game, setGame] = useState<LocalSave | null>(() => loadLocal());
+  const [game, setGame] = useState<SavedGame | null>(() => loadLocalGame(id));
   const [revealed, setRevealed] = useState<number | null>(null);
 
-  const commit = (next: LocalSave) => {
-    saveLocal(next);
+  const commit = (next: SavedGame) => {
+    saveLocalGame(next);
     setGame(next);
   };
 
@@ -40,7 +42,7 @@ function LocalGameLoaded() {
       const result = applyMove(game.state, game.state.current, move);
       if (!result.ok) return;
       const next = { ...game, state: result.state };
-      saveLocal(next);
+      saveLocalGame(next);
       setGame(next);
     }, BOT_DELAY_MS);
     return () => window.clearTimeout(timer);
@@ -71,15 +73,9 @@ function LocalGameLoaded() {
     return null;
   };
 
-  const rematch = () => {
-    commit({ ...game, state: createGame(game.setup) });
-    setRevealed(null);
-  };
-
-  const newGame = () => {
-    clearLocal();
-    router.push("/");
-  };
+  // A rematch is a new game, so the finished one stays in the history.
+  const rematch = () => router.push(`/play/${createLocalGame(game.mode, game.setup)}`);
+  const newGame = () => router.push("/");
 
   return (
     <>

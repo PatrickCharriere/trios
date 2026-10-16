@@ -40,16 +40,18 @@ describe("tile set", () => {
 });
 
 describe("board layout", () => {
-  it("is symmetric with the centre counting double", () => {
+  it("matches the physical board (triolets Board.py, given as column, row)", () => {
+    const squares: [number, number, string][] = [
+      [7, 0, "replay"], [1, 1, "replay"], [4, 1, "triple"], [10, 1, "triple"], [13, 1, "replay"],
+      [7, 3, "double"], [1, 4, "triple"], [4, 4, "double"], [10, 4, "double"], [13, 4, "triple"],
+      [0, 7, "replay"], [3, 7, "double"], [7, 7, "centre"], [11, 7, "double"], [14, 7, "replay"],
+      [1, 10, "triple"], [4, 10, "double"], [10, 10, "double"], [13, 10, "triple"], [7, 11, "double"],
+      [1, 13, "replay"], [4, 13, "triple"], [10, 13, "triple"], [13, 13, "replay"], [7, 14, "replay"],
+    ];
+    const expected = Array(CELL_COUNT).fill("plain");
+    for (const [col, row, kind] of squares) expected[at(row, col)] = kind;
+    expect([...LAYOUT]).toEqual(expected);
     expect(LAYOUT[CENTRE]).toBe("centre");
-    for (let r = 0; r < 15; r++) {
-      for (let c = 0; c < 15; c++) {
-        expect(LAYOUT[at(r, c)]).toBe(LAYOUT[at(c, r)]);
-        expect(LAYOUT[at(r, c)]).toBe(LAYOUT[at(14 - r, 14 - c)]);
-      }
-    }
-    const count = (kind: string) => LAYOUT.filter((s) => s === kind).length;
-    expect([count("triple"), count("double"), count("replay")]).toEqual([12, 12, 12]);
   });
 });
 
@@ -64,12 +66,13 @@ describe("evaluatePlacement", () => {
     expect(result).toMatchObject({ ok: true, score: 14 });
   });
 
-  it("scores an opening pair through the centre at double", () => {
+  it("doubles only the tile on the centre in an opening pair", () => {
     const result = evaluatePlacement(board(), rack(7, 8), [
       { tileId: 0, cell: CENTRE },
       { tileId: 1, cell: at(C, C + 1) },
     ]);
-    expect(result).toMatchObject({ ok: true, score: 30 });
+    // 7 on the star counts 14, the 8 beside it counts 8.
+    expect(result).toMatchObject({ ok: true, score: 22 });
   });
 
   it("awards a Triolet for three rack tiles making 15 in one go, unmultiplied", () => {
@@ -147,26 +150,40 @@ describe("evaluatePlacement", () => {
     expect(evaluatePlacement(b, rack(3), [{ tileId: 0, cell: CENTRE }])).toMatchObject({ error: "occupied" });
   });
 
-  it("scores every group a tile joins, applying the square to each", () => {
-    // 8 above (6,6) and 7 left of it; a 0 on (6,6), a double square, makes two pairs.
-    const b = board({ [at(5, 6)]: 8, [at(6, 5)]: 7, [CENTRE]: 1 });
-    expect(LAYOUT[at(6, 6)]).toBe("double");
-    const result = evaluatePlacement(b, rack(0), [{ tileId: 0, cell: at(6, 6) }]);
-    expect(result).toMatchObject({ ok: true, score: (8 + 7) * 2 });
-    if (result.ok) expect(result.groups).toHaveLength(2);
+  it("scores every group a tile joins, doubling only that tile in each pair", () => {
+    // 8 above (4,4) and 7 left of it; a 3 on the double square (4,4) makes two pairs.
+    const b = board({ [at(3, 4)]: 8, [at(4, 3)]: 7 });
+    expect(LAYOUT[at(4, 4)]).toBe("double");
+    const result = evaluatePlacement(b, rack(3), [{ tileId: 0, cell: at(4, 4) }]);
+    // Each pair counts the 3 twice: (8 + 6) + (7 + 6).
+    expect(result).toMatchObject({ ok: true, score: 27 });
+    if (result.ok) expect(result.groups.map((g) => g.points).sort()).toEqual([13, 14]);
   });
 
-  it("triples a whole trio, bonus included", () => {
-    expect(LAYOUT[at(5, 5)]).toBe("triple");
-    const b = board({ [at(5, 6)]: 6, [at(5, 7)]: 5 });
-    const result = evaluatePlacement(b, rack(4), [{ tileId: 0, cell: at(5, 5) }]);
+  it("triples only the tile on the square in a pair", () => {
+    expect(LAYOUT[at(1, 4)]).toBe("triple");
+    const b = board({ [at(1, 5)]: 6 });
+    const result = evaluatePlacement(b, rack(4), [{ tileId: 0, cell: at(1, 4) }]);
+    expect(result).toMatchObject({ ok: true, score: 4 * 3 + 6 });
+  });
+
+  it("triples a whole trio completed this turn, bonus included", () => {
+    const b = board({ [at(1, 5)]: 6, [at(1, 6)]: 5 });
+    const result = evaluatePlacement(b, rack(4), [{ tileId: 0, cell: at(1, 4) }]);
     expect(result).toMatchObject({ ok: true, score: 90 });
   });
 
+  it("never reuses a square once its tile is down", () => {
+    // The 4 on the triple was placed on an earlier turn; completing the trio now scores a plain 30.
+    const b = board({ [at(1, 4)]: 4, [at(1, 5)]: 6 });
+    const result = evaluatePlacement(b, rack(5), [{ tileId: 0, cell: at(1, 6) }]);
+    expect(result).toMatchObject({ ok: true, score: 30 });
+  });
+
   it("flags a replay square", () => {
-    expect(LAYOUT[at(4, 6)]).toBe("replay");
-    const b = board({ [at(5, 6)]: 6 });
-    const result = evaluatePlacement(b, rack(2), [{ tileId: 0, cell: at(4, 6) }]);
+    expect(LAYOUT[at(1, 1)]).toBe("replay");
+    const b = board({ [at(2, 1)]: 6 });
+    const result = evaluatePlacement(b, rack(2), [{ tileId: 0, cell: at(1, 1) }]);
     expect(result).toMatchObject({ ok: true, replay: true, score: 8 });
   });
 
