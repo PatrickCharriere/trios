@@ -64,6 +64,8 @@ npm run typecheck
 npm run build
 ```
 
+GitHub Actions runs the same lint, typecheck, test and build steps on every pull request and every push to `develop` (`.github/workflows/ci.yml`).
+
 Running a production build locally (`npm run build && npm start`) disables online play unless you either connect Upstash variables in `.env.local` or set `TRIOS_MEMORY_STORE=1`.
 
 ## How it's built
