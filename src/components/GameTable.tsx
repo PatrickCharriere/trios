@@ -6,7 +6,9 @@ import {
   MAX_VALUE,
   evaluatePlacement,
   isBoardEmpty,
+  sinceLastTurn,
   type GameView,
+  type LogEntry,
   type Move,
   type Placement,
   type RuleError,
@@ -73,10 +75,15 @@ export function GameTable({ view, canAct, waiting, notice, onMove, overActions }
     return map;
   }, [placements, view.rack]);
 
+  const recent = useMemo(() => sinceLastTurn(view.log, view.seat), [view.log, view.seat]);
+
+  // The tiles the others placed since your last turn. Once you have played (or
+  // when watching), the latest move instead, whoever made it.
   const lastCells = useMemo(() => {
-    const last = [...view.log].reverse().find((e) => e.type === "place");
-    return new Set(last?.type === "place" ? last.cells : []);
-  }, [view.log]);
+    const latest = [...view.log].reverse().find((e) => e.type === "place");
+    const moves = recent.length > 0 ? recent : latest ? [latest] : [];
+    return new Set(moves.flatMap((e) => (e.type === "place" ? e.cells : [])));
+  }, [recent, view.log]);
 
   const errorCells = useMemo(
     () => new Set(evaluation && !evaluation.ok ? (evaluation.cells ?? []) : []),
@@ -157,7 +164,12 @@ export function GameTable({ view, canAct, waiting, notice, onMove, overActions }
             <li key={i} className={i === view.current && view.status === "playing" ? "current" : ""}>
               <span className="who">
                 {player.name}
-                {i === view.seat && <span className="muted"> ({t.game.you})</span>}
+                {i === view.seat && (
+                  <>
+                    {" "}
+                    <span className="you">({t.game.you})</span>
+                  </>
+                )}
               </span>
               <span className="dots" role="img" aria-label={t.game.tiles(view.rackCounts[i])}>
                 {Array.from({ length: view.rackCounts[i] }, (_, k) => (
@@ -196,6 +208,7 @@ export function GameTable({ view, canAct, waiting, notice, onMove, overActions }
           <GameOver view={view} actions={overActions} notice={notice} />
         ) : (
           <>
+            {recent.length > 0 && <Recap view={view} entries={recent} />}
             <p className="status" aria-live="polite">{statusLine}</p>
             {notice && <p className="notice">{notice}</p>}
             {view.seat !== null ? (
@@ -341,6 +354,41 @@ function MoveLog({ view }: { view: GameView }) {
           );
         }
         return <li key={i} className="muted">{entry.type === "exchange" ? t.log.exchange(name, entry.count) : t.log.pass(name)}</li>;
+      })}
+    </ul>
+  );
+}
+
+/** The other players' moves since your last turn, with the tiles they placed. */
+function Recap({ view, entries }: { view: GameView; entries: LogEntry[] }) {
+  const { t } = useI18n();
+  return (
+    <ul className="recap" aria-live="polite">
+      {entries.map((entry, i) => {
+        const name = view.players[entry.player]?.name ?? "";
+        if (entry.type !== "place") {
+          return (
+            <li key={i} className="muted">
+              {entry.type === "exchange" ? t.log.exchange(name, entry.count) : t.log.pass(name)}
+            </li>
+          );
+        }
+        return (
+          <li key={i}>
+            {t.recap.placed(name)}{" "}
+            <span className="recap-move">
+              <span className="mini-tiles">
+                {entry.cells.map((cell) => {
+                  const tile = view.board[cell];
+                  return tile && <TileFace key={cell} value={tile.value} wild={tile.wild} />;
+                })}
+              </span>
+              {t.recap.scored(entry.score)}
+            </span>
+            {entry.triolet && <> <span className="tag">Triolet</span></>}
+            {entry.replay && <> <span className="tag">↻</span></>}
+          </li>
+        );
       })}
     </ul>
   );

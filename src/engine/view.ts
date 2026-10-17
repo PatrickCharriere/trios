@@ -27,6 +27,17 @@ export interface GameView {
 
 const LOG_LIMIT = 30;
 
+/**
+ * What the other players have done since `seat` last played, oldest first:
+ * the moves to point out when it is that player's turn again.
+ */
+export function sinceLastTurn(log: readonly LogEntry[], seat: number | null): LogEntry[] {
+  if (seat === null) return [];
+  let start = log.length;
+  while (start > 0 && log[start - 1].player !== seat) start--;
+  return log.slice(start);
+}
+
 export function viewFor(state: GameState, seat: number | null): GameView {
   const over = state.status === "over";
   return {

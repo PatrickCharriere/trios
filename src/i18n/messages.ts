@@ -80,6 +80,10 @@ const fr = {
     exchange: (name: string, n: number) => `${name} échange ${n} jeton${s(n)}`,
     pass: (name: string) => `${name} passe`,
   },
+  recap: {
+    placed: (name: string) => `${name} a posé`,
+    scored: (n: number) => `${NB}: ${n}${NB}point${s(n)}`,
+  },
   over: {
     title: "Partie terminée",
     winner: (name: string) => `${name} gagne${NB}!`,
@@ -250,6 +254,10 @@ const en: Messages = {
     place: (name, points) => `${name}: ${points} pt${es(points)}`,
     exchange: (name, n) => `${name} exchanged ${n} tile${es(n)}`,
     pass: (name) => `${name} passed`,
+  },
+  recap: {
+    placed: (name) => `${name} played`,
+    scored: (n) => `: ${n} point${es(n)}`,
   },
   over: {
     title: "Game over",
