@@ -22,6 +22,9 @@ import { useI18n } from "@/i18n/I18nProvider";
 import { positionOf, runCoach, runDanger } from "@/lib/coach/client";
 import { useTeaching } from "@/lib/teaching";
 import { useMediaQuery } from "@/lib/useMediaQuery";
+import { useSettings } from "@/lib/useSettings";
+import { playSound } from "@/lib/sound";
+import { useGameOverTune } from "@/lib/useGameAlerts";
 import { Board, type PendingTile, type SquareMark } from "./Board";
 import { Modal } from "./Modal";
 import { MoveHistory, tilesAt } from "./MoveHistory";
@@ -65,7 +68,9 @@ const WIDE = "(min-width: 1200px)";
 export function GameTable({ view, canAct, waiting, notice, onMove, overActions, liveHelp = false }: GameTableProps) {
   const { t } = useI18n();
   const [teaching] = useTeaching();
+  const [settings] = useSettings();
   const help = teaching && liveHelp;
+  useGameOverTune(view.status);
   const [aid, setAid] = useState<BoardAid>("none");
   const [danger, setDanger] = useState<{ board: readonly (PlacedTile | null)[]; list: Danger[] } | null>(null);
   const wide = useMediaQuery(WIDE);
@@ -210,6 +215,7 @@ export function GameTable({ view, canAct, waiting, notice, onMove, overActions, 
       return;
     }
     update({ placements: [...placements, { tileId, cell }], selected: null, mode: "place" });
+    playSound("place");
   };
 
   const onCell = (cell: number) => {
@@ -293,7 +299,7 @@ export function GameTable({ view, canAct, waiting, notice, onMove, overActions, 
   }
 
   return (
-    <div className={`table${teaching ? " learning" : ""}`}>
+    <div className={`table${teaching ? " learning" : ""}${settings.blink ? " blink" : ""}`}>
       <div className="side side-play">
         <section className="area-scores panel" aria-label="Scores">
           <ul className="scores">
@@ -484,6 +490,7 @@ export function GameTable({ view, canAct, waiting, notice, onMove, overActions, 
               selected: null,
             });
             setWildFor(null);
+            playSound("place");
           }}
           onCancel={() => setWildFor(null)}
         />

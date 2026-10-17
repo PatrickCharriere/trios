@@ -12,6 +12,11 @@
   --bad-ink: #ffffff;
   --shadow: 0 1px 2px rgb(5 30 60 / 0.1), 0 6px 18px rgb(5 30 60 / 0.08);
   --radius: 14px;
+  /* The page background: a faint grid of dots and soft washes of the board's colours. */
+  --dots: rgb(0 72 125 / 0.13);
+  --wash-1: rgb(245 197 24 / 0.16);
+  --wash-2: rgb(1 97 172 / 0.11);
+  --wash-3: rgb(240 138 28 / 0.12);
 
   /* The board is a physical object, so it keeps the same colours in both themes:
      dark blue frame, blue squares and silver lines as in the triolets project,
@@ -44,8 +49,10 @@
   color-scheme: light;
 }
 
+/* Dark colours follow the system unless a theme is picked in the settings,
+   which sets data-theme on the page. Keep these two blocks the same. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #071827;
     --surface: #0e2539;
     --surface-2: #143350;
@@ -58,22 +65,63 @@
     --bad: #ff7d6b;
     --bad-ink: #1a0603;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.45), 0 6px 18px rgb(0 0 0 / 0.3);
+    --dots: rgb(150 195 240 / 0.08);
+    --wash-1: rgb(245 197 24 / 0.05);
+    --wash-2: rgb(79 163 227 / 0.09);
+    --wash-3: rgb(240 138 28 / 0.05);
     color-scheme: dark;
   }
+}
+
+:root[data-theme="dark"] {
+  --bg: #071827;
+  --surface: #0e2539;
+  --surface-2: #143350;
+  --ink: #e6f0fa;
+  --muted: #9fb6cc;
+  --line: #23435f;
+  --accent: #4fa3e3;
+  --accent-ink: #04121f;
+  --good: #5ed39a;
+  --bad: #ff7d6b;
+  --bad-ink: #1a0603;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.45), 0 6px 18px rgb(0 0 0 / 0.3);
+  --dots: rgb(150 195 240 / 0.08);
+  --wash-1: rgb(245 197 24 / 0.05);
+  --wash-2: rgb(79 163 227 / 0.09);
+  --wash-3: rgb(240 138 28 / 0.05);
+  color-scheme: dark;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  background: var(--bg);
+}
+
 html,
 body {
   margin: 0;
-  background: var(--bg);
   color: var(--ink);
   font-family: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Fixed behind the page, so the dots stay put as it scrolls. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle, var(--dots) 1px, transparent 1.5px) 0 0 / 22px 22px,
+    radial-gradient(ellipse 60% 55% at 0% 0%, var(--wash-1), transparent),
+    radial-gradient(ellipse 55% 50% at 100% 10%, var(--wash-2), transparent),
+    radial-gradient(ellipse 60% 50% at 80% 100%, var(--wash-3), transparent);
 }
 
 h1,
@@ -221,6 +269,21 @@ p {
   font-variant: small-caps;
 }
 
+.settings-btn > span:first-child {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+@media (max-width: 560px) {
+  .btn.settings-btn {
+    padding-inline: 12px;
+  }
+
+  .settings-label {
+    display: none;
+  }
+}
+
 :focus-visible {
   outline: 3px solid var(--ink);
   outline-offset: 2px;
@@ -243,7 +306,7 @@ p {
   font-weight: 600;
 }
 
-input {
+input:not([type="checkbox"], [type="radio"]) {
   font: inherit;
   font-size: 16px;
   padding: 10px 12px;
@@ -426,7 +489,9 @@ input {
   font-size: 3.6cqw;
 }
 
-/* Tiles placed since your last turn: a white ring and a glow that pulses as they land.
+/* Tiles placed since your last turn: a white ring and a glow that pulses as they land,
+   three times, or until the next move with the blink setting on. Only the glow's
+   opacity changes, so the board isn't repainted on every frame while it blinks.
    Raised above the neighbouring squares so the ring and glow aren't hidden. */
 .cell.last {
   z-index: 1;
@@ -437,9 +502,24 @@ input {
     0 0 0 2px var(--edge),
     0 0 0 5px var(--mark-last),
     0 0 12px 5px var(--mark-glow);
-  animation:
-    land 0.4s ease-out,
-    glow 1.2s ease-in-out 0.4s 3;
+  animation: land 0.4s ease-out;
+}
+
+.cell.last .token::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    0 0 0 6px var(--mark-last),
+    0 0 20px 10px var(--mark-glow);
+  opacity: 0;
+  pointer-events: none;
+  animation: glow 1.2s ease-in-out 0.4s 3;
+}
+
+.table.blink .cell.last .token::after {
+  animation: glow 1.6s ease-in-out 0.4s infinite;
 }
 
 @keyframes land {
@@ -453,15 +533,14 @@ input {
 
 @keyframes glow {
   50% {
-    box-shadow:
-      0 0 0 2px var(--edge),
-      0 0 0 6px var(--mark-last),
-      0 0 20px 10px var(--mark-glow);
+    opacity: 1;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cell.last .token {
+  .cell.last .token,
+  .cell.last .token::after,
+  .table.blink .cell.last .token::after {
     animation: none;
   }
 }
@@ -1164,6 +1243,11 @@ li.log-row {
   background: rgb(0 0 0 / 0.45);
 }
 
+/* A dialog that takes focus itself (see Modal) needs no ring around the whole of it. */
+.dialog:focus {
+  outline: none;
+}
+
 .dialog > .dialog-body {
   padding: 24px;
   max-width: none;
@@ -1179,9 +1263,13 @@ li.log-row {
 }
 
 @media (prefers-color-scheme: dark) {
-  .dialog.handoff::backdrop {
+  :root:not([data-theme="light"]) .dialog.handoff::backdrop {
     background: #071827;
   }
+}
+
+:root[data-theme="dark"] .dialog.handoff::backdrop {
+  background: #071827;
 }
 
 .dialog ol {
@@ -1284,7 +1372,9 @@ li.log-row {
   padding: 0;
 }
 
-.segmented > div {
+/* .choice is the settings' version, with radio buttons inside (see Settings below). */
+.segmented > div,
+.choice {
   display: inline-flex;
   flex-wrap: wrap;
   background: var(--surface-2);
@@ -1293,7 +1383,8 @@ li.log-row {
   gap: 2px;
 }
 
-.segmented button {
+.segmented button,
+.choice label {
   font: inherit;
   font-weight: 600;
   border: 0;
@@ -1305,7 +1396,8 @@ li.log-row {
   cursor: pointer;
 }
 
-.segmented button.on {
+.segmented button.on,
+.choice label.on {
   background: var(--surface);
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.15);
   color: var(--accent);
@@ -1513,4 +1605,90 @@ a.history-main:hover {
 .seats .empty {
   color: var(--muted);
   font-weight: 400;
+}
+
+/* Settings */
+
+.dialog.settings .dialog-body {
+  gap: 20px;
+}
+
+@media (max-width: 480px) {
+  .dialog.settings > .dialog-body {
+    padding: 20px;
+  }
+}
+
+.setting {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.setting legend {
+  padding: 0;
+  margin-bottom: 10px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.check input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.setting-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* One option out of a few, styled like the home page's choices. The radio buttons
+   stay in the page, invisible, for keyboards and screen readers. */
+.choice {
+  align-self: flex-start;
+}
+
+.choice label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.choice input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+
+.choice label:has(input:focus-visible) {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.choice.disabled {
+  opacity: 0.45;
+}
+
+.choice.disabled label {
+  cursor: not-allowed;
 }
