@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { Lang } from "@/i18n/messages";
 import { loadName, saveName } from "@/lib/online/client";
 import { MAX_NAME } from "@/lib/online/protocol";
 import type { Theme, Volume } from "@/lib/settings";
+import { pushStatus, testPush, turnPushOff, turnPushOn, type PushStatus } from "@/lib/push/client";
 import { playSound } from "@/lib/sound";
 import { useSettings } from "@/lib/useSettings";
 import { useTeaching } from "@/lib/teaching";
@@ -41,6 +42,77 @@ function Choice<T extends string>({
         </label>
       ))}
     </div>
+  );
+}
+
+/** Turn notifications for online games, with what stands in the way when they can't be turned on. */
+function Notifications() {
+  const { lang, t } = useI18n();
+  const s = t.settings;
+  const [status, setStatus] = useState<PushStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    pushStatus().then((next) => live && setStatus(next));
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  // Straight from the tap: the browser only asks for permission in answer to one.
+  const toggle = async (on: boolean) => {
+    setBusy(true);
+    setNote(null);
+    const next = on ? await turnPushOn(lang) : (await turnPushOff(), "off");
+    setBusy(false);
+    setStatus(next === "failed" ? "off" : next);
+    if (next === "failed") setNote(s.notifyFailed);
+  };
+
+  const test = async () => {
+    setNote(null);
+    const result = await testPush(lang);
+    setNote(result === "sent" ? s.notifyTestSent : result === "gone" ? s.notifyTestGone : s.notifyTestFailed);
+  };
+
+  const hint: Record<PushStatus, string> = {
+    unsupported: s.notifyUnsupported,
+    install: s.notifyInstall,
+    unavailable: s.notifyUnavailable,
+    blocked: s.notifyBlocked,
+    off: s.notifyHint,
+    on: s.notifyHint,
+  };
+  const usable = status === "on" || status === "off";
+
+  return (
+    <fieldset className="setting">
+      <legend>{s.notifications}</legend>
+      <label className="check">
+        <input type="checkbox" checked={status === "on"} disabled={!usable || busy} onChange={(e) => toggle(e.target.checked)} />
+        {s.notifyOn}
+      </label>
+      {status && <p className="muted small">{hint[status]}</p>}
+      {status === "on" && (
+        <div className="setting-row">
+          <button type="button" className="btn small-btn" onClick={test}>
+            {s.notifyTest}
+          </button>
+          {note && (
+            <span className="small" role="status">
+              {note}
+            </span>
+          )}
+        </div>
+      )}
+      {status !== "on" && note && (
+        <p className="small" role="status">
+          {note}
+        </p>
+      )}
+    </fieldset>
   );
 }
 
@@ -97,6 +169,8 @@ export function SettingsDialog({ onClose, onRules }: { onClose: () => void; onRu
           </button>
         </div>
       </fieldset>
+
+      <Notifications />
 
       <fieldset className="setting">
         <legend>{s.theme}</legend>

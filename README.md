@@ -10,7 +10,7 @@ A number tile game where every line of three must add up to exactly 15. It's a w
 - **Pass and play:** two to four people on one device, with a hand-off screen so nobody sees the next player's tiles.
 - **Online with friends:** create a game, send the link, and play from separate devices. This needs a free Upstash Redis store (see below); the other two modes work without it.
 
-Each section of the home page lists its games, in progress and finished, with their status (your turn, someone else's turn, won, lost, waiting for players), the scores and when they were last played. Tap a game to pick it up again, or remove it from the list. Games against the computer and pass-and-play games are stored in the browser: every game in progress, plus the 40 most recent finished ones. Online games are listed for the browser that created or joined them, and their status is refreshed from the server when the home page opens.
+Each section of the home page lists its games, in progress and finished, with their status (your turn, someone else's turn, won, lost, waiting for players), the scores and when they were last played. Tap a game to pick it up again, or remove it from the list. Removing an online game also tells the server you've left it: it stops notifying you, and once every player has removed it the game is deleted rather than left to expire. Games against the computer and pass-and-play games are stored in the browser: every game in progress, plus the 40 most recent finished ones. Online games are listed for the browser that created or joined them, and their status is refreshed from the server when the home page opens.
 
 Every move of a game is kept. The **Moves played / Coups joués** list shows the latest eight, opens up to the whole game, and tapping a move outlines its tiles on the board. Above your rack, a short recap shows what the others played since your last turn, and their tiles are ringed on the board and keep glowing until the next move.
 
@@ -39,6 +39,7 @@ The **⚙ Réglages / Settings** button at the top of every page opens them; the
 
 - **Your name**, suggested when you start or join a game.
 - **Sounds**, on by default, at three volumes, with a button to hear them: a soft knock as you place a tile, a short tune when a game ends and, in online games, two rising notes when it becomes your turn, including as the game starts. If the game is in a background tab at that moment, the tab's title changes to "● À vous de jouer" until you come back to it. Against the computer or when sharing one device you're already watching the game, so that chime stays quiet there. The sounds are made in the browser with the Web Audio API, so there are no files to load; browsers only allow them after your first tap or key press on the page.
+- **Notifications** (online games): "your turn", even with the browser closed or the phone locked, plus the result when a game ends. Each device turns them on for itself, and a **Try it** button sends a test. On iPhone and iPad, Safari only allows them once Trios is on the Home Screen (Share, then Add to Home Screen) and opened from its icon; the setting says so there. The server needs its keys first (see Deploying).
 - **Appearance**: automatic (follows the device), light or dark. The choice applies before the page is drawn, so it never flashes the other theme first.
 - **Game**: whether the last move keeps glowing until the next one (on by default; off, it pulses three times), and teaching mode.
 - **Language** and a link to the **rules**.
@@ -80,6 +81,10 @@ The official rulebook PDFs weren't reachable while building this, so some detail
 
 Until a store is connected, the home page says online play isn't switched on, and the other modes work as normal.
 
+4. To switch on notifications: run `npm run vapid-keys` (on any computer with Node) and add the two lines it prints, `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY`, under **Settings → Environment Variables** for Production (and Preview, to try them on preview deployments), then redeploy. Keep the private key secret, and keep the same pair afterwards: browsers subscribe to the public key, so a new pair means everyone turns notifications on again. `VAPID_SUBJECT` is optional (a `mailto:` or `https:` contact for the push services; it defaults to the site's address). Without the keys, the setting says notifications aren't set up.
+
+**How notifications work.** Turning them on registers a small service worker (`public/sw.js`) and a push subscription in the browser, which every online game this browser plays in then keeps with the player's seat, along with the player's language. After a move, the server works out who to tell (the player whose turn it is, or everyone when the game ends; never the player who just moved) and, once its response has gone out, encrypts each message for its browser and sends it to that browser's push service (Google, Apple, Mozilla or Microsoft), signed with the VAPID key. It uses Node's crypto rather than a library; the tests check the encryption against the reference implementation. The server only ever sends to those push services, and forgets subscriptions they report as gone. When the game is already on screen, the service worker removes the notification at once, since the page has chimed.
+
 **Free tier headroom.** Upstash's free plan allows 500,000 commands a month. While a game is on, the player waiting checks for moves every 1.5 seconds and the player to move every 8 seconds. A tab in the background checks only while waiting, so the your-turn chime still arrives: every 6 seconds, then once a minute after ten minutes, stopping after two hours so a forgotten tab can't use up the quota. With both players looking at the game, that works out to roughly 175 hours of two-player online play a month. Games expire 14 days after their last move.
 
 ## Development
@@ -105,8 +110,9 @@ Running a production build locally (`npm run build && npm start`) disables onlin
 - `src/components/`: the board, rack and game screens, shared by local and online play, and the home page lists.
 - `src/lib/history.ts`: the games stored in the browser and the summaries shown in the home page lists.
 - `src/lib/settings.ts` and `src/lib/sound.ts`: the settings this browser remembers, and the game's sounds, synthesised with the Web Audio API.
+- `src/lib/push/` and `public/sw.js`: notifications. `webpush.ts` encrypts and signs (RFC 8291 and 8292), `notices.ts` decides who is told what, `client.ts` subscribes the browser, and the service worker shows them.
 - `src/lib/online/`: the online service. The server holds the full game; each player only receives their own rack. Moves are validated on the server, under a short lock so simultaneous requests can't clash.
-- `src/app/api/`: route handlers for creating, joining, polling and playing online games.
+- `src/app/api/`: route handlers for creating, joining, polling, playing and leaving online games, notification subscriptions, and a test notification.
 - `src/i18n/`: French and English text.
 
 Triolet is a game by André and John Perriolat, published by Gigamic. Trios is an unofficial fan implementation and isn't affiliated with them.

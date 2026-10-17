@@ -1,4 +1,5 @@
 import type { Move } from "@/engine";
+import type { Lang } from "@/i18n/messages";
 import { TOKEN_HEADER, type PollResult, type SeatGrant, type Snapshot } from "./protocol";
 
 export class ApiFailure extends Error {
@@ -31,7 +32,8 @@ async function call<T>(path: string, options: { body?: unknown; token?: string |
 }
 
 export const api = {
-  config: () => call<{ online: boolean }>("/api/config"),
+  /** Whether online play is on, and the key browsers subscribe to notifications with (null when they're off). */
+  config: () => call<{ online: boolean; push: string | null }>("/api/config"),
   create: (name: string, seats: number) => call<SeatGrant>("/api/games", { body: { name, seats } }),
   poll: (id: string, token: string | null, since?: number) =>
     call<PollResult>(`/api/games/${id}${since ? `?since=${since}` : ""}`, { token }),
@@ -39,6 +41,12 @@ export const api = {
   start: (id: string, token: string) => call<Snapshot>(`/api/games/${id}/start`, { body: {}, token }),
   move: (id: string, token: string, move: Move) => call<Snapshot>(`/api/games/${id}/move`, { body: { move }, token }),
   rematch: (id: string, token: string) => call<Snapshot>(`/api/games/${id}/rematch`, { body: {}, token }),
+  /** Turns this player's notifications for a game on (a subscription) or off (null). */
+  push: (id: string, token: string, subscription: PushSubscriptionJSON | null, lang: Lang) =>
+    call<{ ok: true }>(`/api/games/${id}/push`, { body: { subscription, lang }, token }),
+  leave: (id: string, token: string) => call<{ ok: true }>(`/api/games/${id}/leave`, { body: {}, token }),
+  testPush: (subscription: PushSubscriptionJSON, lang: Lang) =>
+    call<{ result: "sent" | "gone" | "failed" }>("/api/push/test", { body: { subscription, lang } }),
 };
 
 const FAST_POLL_MS = 1500;
@@ -86,6 +94,15 @@ export const loadSeat = (id: string): SavedSeat | null => readSeats()[id] ?? nul
 
 /** Every online game this browser holds a seat in. */
 export const listSeatIds = (): string[] => Object.keys(readSeats());
+
+/**
+ * Tells the server this browser has left a game it removed from its list:
+ * no more notifications for it, and the game goes once every player has left.
+ */
+export function leaveOnlineGame(id: string) {
+  const seat = loadSeat(id);
+  if (seat) api.leave(id, seat.token).catch(() => {});
+}
 
 export function saveSeat(id: string, seat: SavedSeat) {
   memorySeats[id] = seat;

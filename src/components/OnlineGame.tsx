@@ -9,6 +9,7 @@ import { errorMessage } from "@/i18n/messages";
 import { markOnlineExpired, recordOnlineGame } from "@/lib/history";
 import { ApiFailure, api, loadName, loadSeat, pollDelay, saveName, saveSeat, type SavedSeat } from "@/lib/online/client";
 import { MAX_NAME, type Snapshot } from "@/lib/online/protocol";
+import { syncPush } from "@/lib/push/client";
 import { useTurnAlert } from "@/lib/useGameAlerts";
 import { useHydrated } from "@/lib/useHydrated";
 import { GameTable } from "./GameTable";
@@ -22,7 +23,7 @@ export function OnlineGame() {
 
 
 function OnlineGameLoaded({ id }: { id: string }) {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
   const [seat, setSeat] = useState<SavedSeat | null>(() => loadSeat(id));
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [fatal, setFatal] = useState<Fatal | null>(null);
@@ -46,6 +47,11 @@ function OnlineGameLoaded({ id }: { id: string }) {
   // The others play elsewhere, so a chime tells the player their turn has come.
   // Local games go without: the player is already watching.
   useTurnAlert(snap, myTurn, t.game.yourTurnTitle);
+
+  // With notifications on, this game gets this device's subscription, in the current language.
+  useEffect(() => {
+    if (token) void syncPush(id, lang);
+  }, [id, token, lang]);
 
   useEffect(() => {
     let stopped = false;

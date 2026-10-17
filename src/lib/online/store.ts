@@ -1,9 +1,14 @@
 import { Redis } from "@upstash/redis";
 import type { GameState } from "@/engine";
+import type { PushTarget } from "@/lib/push/protocol";
 
 export interface Member {
   name: string;
   token: string;
+  /** Where to send this player's notifications, when they turned them on. */
+  push?: PushTarget;
+  /** The player removed the game from their list. Once every player has, the game is deleted. */
+  left?: boolean;
 }
 
 /** Everything the server keeps about one online game. */
@@ -23,6 +28,7 @@ export interface Store {
   /** Saves a new record unless the id is taken. */
   create(record: OnlineRecord): Promise<boolean>;
   put(record: OnlineRecord): Promise<void>;
+  remove(id: string): Promise<void>;
   /** Takes the game's write lock, or returns null if it stays busy. */
   lock(id: string): Promise<(() => Promise<void>) | null>;
 }
@@ -74,6 +80,9 @@ export function upstashStore(url: string, token: string): Store {
     async put(record) {
       await redis.set(gameKey(record.id), JSON.stringify(record), { ex: TTL_SECONDS });
     },
+    async remove(id) {
+      await redis.del(gameKey(id));
+    },
     async lock(id) {
       const key = lockKey(id);
       const owner = crypto.randomUUID();
@@ -121,6 +130,9 @@ export function memoryStore(): Store {
     },
     async put(record) {
       write(record);
+    },
+    async remove(id) {
+      data.games.delete(id);
     },
     async lock(id) {
       for (let i = 0; i < LOCK_TRIES; i++) {

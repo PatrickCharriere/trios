@@ -10,7 +10,8 @@
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "vapid-keys": "node scripts/vapid-keys.mjs"
   },
   "dependencies": {
     "@upstash/redis": "^1.39.0",

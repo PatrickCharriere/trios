@@ -7,6 +7,8 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Trios",
   description: "Le jeu de chiffres où chaque ligne de trois fait 15. The number game where every line of three adds up to 15.",
+  // Added to an iPhone's home screen, Trios opens as an app (see manifest.ts).
+  appleWebApp: { title: "Trios", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {

@@ -1,4 +1,6 @@
 import { applyMove, createGame, viewFor, type Move, type RuleError } from "@/engine";
+import { noticesAfter, type Notice } from "@/lib/push/notices";
+import type { PushTarget } from "@/lib/push/protocol";
 import type { PollResult, SeatGrant, Snapshot } from "./protocol";
 import { getStore, type OnlineRecord, type Store } from "./store";
 
@@ -26,6 +28,13 @@ export class OnlineError extends Error {
 // No i, l, o, 0 or 1 (easily confused), and no x, which some fonts draw as × between digits.
 const ID_ALPHABET = "abcdefghjkmnpqrstuvwyz23456789";
 const ID_LENGTH = 6;
+
+/**
+ * Takes the notifications an action calls for. The routes send them once the
+ * response is out, so the player who acted never waits on the push services.
+ */
+export type Notify = (notices: Notice[]) => void;
+const quiet: Notify = () => {};
 
 function randomId() {
   const bytes = crypto.getRandomValues(new Uint8Array(ID_LENGTH));
@@ -100,7 +109,7 @@ export async function createOnlineGame(name: string, seats: number, store = getS
   throw new OnlineError("busy", 409);
 }
 
-export async function joinOnlineGame(id: string, name: string, store = getStore()): Promise<SeatGrant> {
+export async function joinOnlineGame(id: string, name: string, store = getStore(), notify = quiet): Promise<SeatGrant> {
   const token = crypto.randomUUID();
   const record = await mutate(requireStore(store), id, (r) => {
     if (r.state) throw new OnlineError("started", 409);
@@ -108,17 +117,21 @@ export async function joinOnlineGame(id: string, name: string, store = getStore(
     r.members.push({ name, token });
     if (r.members.length === r.seats) deal(r);
   });
-  return { id, token, seat: record.members.length - 1, snapshot: toSnapshot(record, token) };
+  const seat = record.members.length - 1;
+  // The last player in starts the game: whoever plays first may be waiting elsewhere.
+  notify(noticesAfter(record, seat));
+  return { id, token, seat, snapshot: toSnapshot(record, token) };
 }
 
 /** Lets the host start early with whoever has joined (two players at least). */
-export async function startOnlineGame(id: string, token: string | null, store = getStore()): Promise<Snapshot> {
+export async function startOnlineGame(id: string, token: string | null, store = getStore(), notify = quiet): Promise<Snapshot> {
   const record = await mutate(requireStore(store), id, (r) => {
     if (requireSeat(r, token) !== 0) throw new OnlineError("forbidden", 403);
     if (r.state) throw new OnlineError("started", 409);
     if (r.members.length < 2) throw new OnlineError("badRequest", 400);
     deal(r);
   });
+  notify(noticesAfter(record, 0));
   return toSnapshot(record, token);
 }
 
@@ -134,22 +147,73 @@ export async function pollOnlineGame(
   return { snapshot: toSnapshot(record, token) };
 }
 
-export async function playOnlineMove(id: string, token: string | null, move: Move, store = getStore()): Promise<Snapshot> {
+export async function playOnlineMove(
+  id: string,
+  token: string | null,
+  move: Move,
+  store = getStore(),
+  notify = quiet,
+): Promise<Snapshot> {
+  let seat = -1;
   const record = await mutate(requireStore(store), id, (r) => {
-    const seat = requireSeat(r, token);
+    seat = requireSeat(r, token);
     if (!r.state) throw new OnlineError("notYourTurn", 409);
     const result = applyMove(r.state, seat, move);
     if (!result.ok) throw new OnlineError(result.error, 422);
     r.state = result.state;
+    // Playing again means the player is back.
+    delete r.members[seat].left;
   });
+  notify(noticesAfter(record, seat));
   return toSnapshot(record, token);
 }
 
-export async function rematchOnlineGame(id: string, token: string | null, store = getStore()): Promise<Snapshot> {
+export async function rematchOnlineGame(id: string, token: string | null, store = getStore(), notify = quiet): Promise<Snapshot> {
+  let seat = -1;
   const record = await mutate(requireStore(store), id, (r) => {
-    requireSeat(r, token);
+    seat = requireSeat(r, token);
     if (r.state?.status !== "over") throw new OnlineError("notOver", 409);
     deal(r);
   });
+  notify(noticesAfter(record, seat));
   return toSnapshot(record, token);
+}
+
+/** Turns a player's notifications on for this game (`target`) or off (null). */
+export async function setOnlinePush(id: string, token: string | null, target: PushTarget | null, store = getStore()) {
+  await mutate(requireStore(store), id, (r) => {
+    const member = r.members[requireSeat(r, token)];
+    if (target) {
+      member.push = target;
+      // Turning notifications on for a game means the player is back.
+      delete member.left;
+    } else {
+      delete member.push;
+    }
+  });
+  return { ok: true };
+}
+
+/**
+ * A player removed the game from their list: no more notifications for them,
+ * and once every player has done so, nobody can reach the game again, so it
+ * is deleted rather than left to expire.
+ */
+export async function leaveOnlineGame(id: string, token: string | null, store = getStore()) {
+  const s = requireStore(store);
+  const record = await mutate(s, id, (r) => {
+    const member = r.members[requireSeat(r, token)];
+    member.left = true;
+    delete member.push;
+  });
+  if (record.members.every((m) => m.left)) await s.remove(id);
+  return { ok: true };
+}
+
+/** Drops subscriptions a push service reported as gone (unsubscribed or expired). */
+export async function forgetPushTargets(id: string, endpoints: string[], store = getStore()) {
+  const gone = new Set(endpoints);
+  await mutate(requireStore(store), id, (r) => {
+    for (const member of r.members) if (member.push && gone.has(member.push.endpoint)) delete member.push;
+  });
 }

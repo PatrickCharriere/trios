@@ -3,7 +3,7 @@ import { DEFAULT_SETTINGS, THEME_SCRIPT, parseSettings } from "./settings";
 
 describe("parseSettings", () => {
   it("reads saved settings", () => {
-    const saved = { sound: false, volume: "high", theme: "dark", blink: false };
+    const saved = { sound: false, volume: "high", theme: "dark", blink: false, notify: true };
     expect(parseSettings(JSON.stringify(saved))).toEqual(saved);
   });
 

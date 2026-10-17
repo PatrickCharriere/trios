@@ -14,6 +14,8 @@ import {
   type GameMode,
   type GameSummary,
 } from "@/lib/history";
+import { leaveOnlineGame } from "@/lib/online/client";
+import { forgetPushFor } from "@/lib/push/client";
 
 const SHOWN = 4;
 
@@ -76,6 +78,10 @@ export function GameHistory({ mode }: { mode: GameMode }) {
 
   const remove = (g: GameSummary) => {
     removeGame(g.id);
+    if (g.mode === "online") {
+      leaveOnlineGame(g.id);
+      forgetPushFor(g.id);
+    }
     setConfirming(null);
   };
 

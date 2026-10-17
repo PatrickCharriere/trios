@@ -11,13 +11,15 @@ export interface Settings {
   theme: Theme;
   /** The last move keeps glowing until the next one is played. */
   blink: boolean;
+  /** Push notifications for online games on this device (see src/lib/push/client.ts). */
+  notify: boolean;
 }
 
 export type Volume = "low" | "medium" | "high";
 export type Theme = "auto" | "light" | "dark";
 
 export const SETTINGS_KEY = "trios.settings.v1";
-export const DEFAULT_SETTINGS: Settings = { sound: true, volume: "medium", theme: "auto", blink: true };
+export const DEFAULT_SETTINGS: Settings = { sound: true, volume: "medium", theme: "auto", blink: true, notify: false };
 
 const oneOf = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T =>
   allowed.includes(value as T) ? (value as T) : fallback;
@@ -32,6 +34,7 @@ export function parseSettings(raw: string | null): Settings {
       volume: oneOf(data.volume, ["low", "medium", "high"], DEFAULT_SETTINGS.volume),
       theme: oneOf(data.theme, ["auto", "light", "dark"], DEFAULT_SETTINGS.theme),
       blink: typeof data.blink === "boolean" ? data.blink : DEFAULT_SETTINGS.blink,
+      notify: typeof data.notify === "boolean" ? data.notify : DEFAULT_SETTINGS.notify,
     };
   } catch {
     return DEFAULT_SETTINGS;
