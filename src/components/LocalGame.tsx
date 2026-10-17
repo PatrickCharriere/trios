@@ -82,6 +82,7 @@ function LocalGameLoaded({ id }: { id: string }) {
       <GameTable
         view={viewFor(state, seat)}
         canAct={humanTurn && !needsHandoff}
+        liveHelp
         waiting={botTurn ? <span className="thinking">{t.game.thinking(state.players[current].name)}</span> : undefined}
         onMove={onMove}
         overActions={

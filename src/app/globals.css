@@ -31,6 +31,8 @@
   --mark-pending: #f8af00;
   --mark-valid: #34d27b;
   --mark-error: #ff4d3d;
+  /* Teaching mode: the square being read, or the move picked in the history. */
+  --mark-focus: #3fd0ff;
 
   /* Square wooden tiles. */
   --tile-hi: #fbf1d9;
@@ -469,6 +471,49 @@ input {
   z-index: 1;
 }
 
+/* Teaching mode: the square being read, or the tiles of a move picked in the history. */
+.cell.focus {
+  z-index: 2;
+  box-shadow: inset 0 0 0 3px var(--mark-focus);
+}
+
+.cell.focus .token {
+  box-shadow:
+    0 0 0 2px var(--edge),
+    0 0 0 5px var(--mark-focus);
+}
+
+/* Teaching mode labels on open squares: the value a trio needs, the most a pair allows, or ✕.
+   They take the square's own ink, so they read on every colour of square. */
+.cell .hint {
+  font-size: 2.4cqw;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.cell .hint-trio {
+  padding: 0.35cqw 0.55cqw;
+  border-radius: 0.6cqw;
+  background: #fff3c4;
+  color: #3a2c00;
+  font-size: 2.8cqw;
+}
+
+.cell .hint-pair {
+  opacity: 0.9;
+}
+
+.cell .hint-blocked {
+  opacity: 0.45;
+}
+
+.cell .hint.fits {
+  outline: 0.4cqw solid var(--mark-valid);
+  outline-offset: 0.3cqw;
+  border-radius: 0.6cqw;
+}
+
 .cell[aria-disabled="false"]:hover {
   filter: brightness(1.12);
 }
@@ -510,6 +555,7 @@ input {
     "scores"
     "board"
     "controls"
+    "teach"
     "legend"
     "log";
 }
@@ -541,13 +587,25 @@ input {
   grid-area: log;
 }
 
+.area-teach {
+  grid-area: teach;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.area-teach:not(.panel) {
+  align-items: flex-start;
+}
+
 @media (min-width: 900px) {
   .table {
     grid-template-columns: minmax(0, 1fr) 330px;
-    grid-template-rows: auto auto 1fr auto;
+    grid-template-rows: auto auto auto 1fr auto;
     grid-template-areas:
       "board scores"
       "board controls"
+      "board teach"
       "board log"
       "legend log";
     align-items: start;
@@ -671,6 +729,214 @@ input {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* Teaching mode */
+.teach-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.teach-head h3 {
+  font-size: 0.95rem;
+}
+
+.area-teach p {
+  margin: 0;
+}
+
+.board-note {
+  position: relative;
+  margin-top: 10px;
+  padding: 10px 40px 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--mark-focus);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+
+.board-note p {
+  margin: 0;
+}
+
+.note-summary {
+  font-weight: 700;
+}
+
+.note-close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 4px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ideas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.idea,
+.review {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.idea-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.review {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.review-grade {
+  font-weight: 800;
+}
+
+.grade-best .review-grade {
+  color: var(--good);
+}
+
+.grade-weak .review-grade {
+  color: var(--bad);
+}
+
+.reasons {
+  margin: 6px 0 0;
+  padding-left: 1.2em;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.925rem;
+}
+
+.sheet summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.sheet p {
+  margin-top: 4px;
+}
+
+.sheet-grid {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+  gap: 4px;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.sheet-grid li {
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--muted);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.sheet-grid b {
+  color: var(--ink);
+}
+
+.sheet-grid li.uses {
+  background: var(--tile);
+  color: var(--tile-ink);
+}
+
+.sheet-grid li.uses b {
+  color: var(--tile-ink);
+}
+
+.sheet-grid .star {
+  color: var(--tile-star);
+}
+
+/* Move history: every move, latest first; a placed move can be found on the board. */
+.log-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.log-move {
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.log-move:hover,
+.log-move.active {
+  background: var(--surface-2);
+}
+
+.log-move.active {
+  box-shadow: inset 3px 0 0 var(--mark-focus);
+}
+
+li.log-row {
+  padding: 3px 6px;
+}
+
+.log-n {
+  min-width: 2ch;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.log-name {
+  font-weight: 600;
+}
+
+.log-points {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.log.open {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.area-log .log {
+  margin: 8px 0;
 }
 
 /* The tiles and their points wrap as one piece. */

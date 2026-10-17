@@ -6,17 +6,25 @@ import {
   MAX_VALUE,
   evaluatePlacement,
   isBoardEmpty,
+  readBoard,
+  readSquare,
   sinceLastTurn,
+  type CoachPosition,
   type GameView,
   type LogEntry,
   type Move,
+  type PlacedTile,
   type Placement,
   type RuleError,
 } from "@/engine";
 import { useI18n } from "@/i18n/I18nProvider";
-import { Board, type PendingTile } from "./Board";
+import { positionOf, runCoach } from "@/lib/coach/client";
+import { useTeaching } from "@/lib/teaching";
+import { Board, type PendingTile, type SquareMark } from "./Board";
 import { Modal } from "./Modal";
-import { TileFace } from "./TileFace";
+import { MoveHistory, tilesAt } from "./MoveHistory";
+import { SquareNote, TeachingPanel, type Review } from "./Teaching";
+import { MiniTiles, TileFace } from "./TileFace";
 
 export interface GameTableProps {
   view: GameView;
@@ -28,6 +36,12 @@ export interface GameTableProps {
   notice?: string | null;
   onMove: (move: Move) => Promise<RuleError | null> | RuleError | null;
   overActions?: ReactNode;
+  /**
+   * Teaching help during the game (the coach's ideas, reading a square, what
+   * fits where). Off in online games, where it would tip a game against other
+   * people; the review after each move stays available everywhere.
+   */
+  liveHelp?: boolean;
 }
 
 interface Draft {
@@ -40,8 +54,14 @@ interface Draft {
 
 const VALUES = Array.from({ length: MAX_VALUE + 1 }, (_, v) => v);
 
-export function GameTable({ view, canAct, waiting, notice, onMove, overActions }: GameTableProps) {
+export function GameTable({ view, canAct, waiting, notice, onMove, overActions, liveHelp = false }: GameTableProps) {
   const { t } = useI18n();
+  const [teaching] = useTeaching();
+  const help = teaching && liveHelp;
+  const [marksOn, setMarksOn] = useState(false);
+  const [inspected, setInspected] = useState<number | null>(null);
+  const [historyPick, setHistoryPick] = useState<number | null>(null);
+  const [review, setReview] = useState<Review | null>(null);
   const fresh = useCallback(
     (): Draft => ({ version: view.version, placements: [], selected: null, mode: "place", swap: [] }),
     [view.version],
@@ -90,6 +110,51 @@ export function GameTable({ view, canAct, waiting, notice, onMove, overActions }
     [evaluation],
   );
 
+  // Teaching: squares are read with the tiles being drafted counted in, so the
+  // labels follow the move as it is built.
+  const boardWithDraft = useMemo(() => {
+    if (placements.length === 0) return view.board;
+    const next: (PlacedTile | null)[] = view.board.slice();
+    for (const p of placements) {
+      const tile = view.rack.find((r) => r.id === p.tileId);
+      if (tile) next[p.cell] = { id: tile.id, value: tile.face ?? p.value ?? 0, wild: tile.face === null, player: -1, turn: -1 };
+    }
+    return next;
+  }, [view.board, view.rack, placements]);
+
+  const marks = useMemo(() => {
+    if (!help || !marksOn || view.status !== "playing") return undefined;
+    const inHand = view.rack.filter((tile) => !placements.some((p) => p.tileId === tile.id));
+    const map = new Map<number, SquareMark>();
+    for (const reading of readBoard(boardWithDraft, { firstRound: view.firstRound })) {
+      const values = reading.options.map((o) => o.value);
+      const fits = inHand.some((tile) => (tile.face === null ? values.length > 0 : values.includes(tile.face)));
+      const trio = reading.options.find((o) => o.trio);
+      map.set(
+        reading.cell,
+        trio
+          ? { label: String(trio.value), kind: "trio", fits }
+          : values.length
+            ? { label: `≤${Math.max(...values)}`, kind: "pair", fits }
+            : { label: "✕", kind: "blocked", fits: false },
+      );
+    }
+    return map;
+  }, [help, marksOn, view.status, view.rack, view.firstRound, placements, boardWithDraft]);
+
+  const reading = useMemo(
+    () => (help && inspected !== null ? readSquare(boardWithDraft, inspected, { firstRound: view.firstRound }) : null),
+    [help, inspected, boardWithDraft, view.firstRound],
+  );
+
+  const focusCells = useMemo(() => {
+    const cells = new Set<number>();
+    const picked = historyPick !== null ? view.log[historyPick] : undefined;
+    if (picked?.type === "place") picked.cells.forEach((c) => cells.add(c));
+    if (reading) cells.add(reading.cell);
+    return cells;
+  }, [historyPick, view.log, reading]);
+
   const placeTile = (tileId: number, cell: number) => {
     if (!active || view.board[cell] || placements.some((p) => p.cell === cell)) return;
     const tile = view.rack.find((t) => t.id === tileId);
@@ -102,24 +167,49 @@ export function GameTable({ view, canAct, waiting, notice, onMove, overActions }
   };
 
   const onCell = (cell: number) => {
-    const existing = placements.find((p) => p.cell === cell);
-    if (existing) {
-      update({ placements: placements.filter((p) => p !== existing), selected: null });
-      return;
+    if (active && draft.mode === "place") {
+      const existing = placements.find((p) => p.cell === cell);
+      if (existing) {
+        update({ placements: placements.filter((p) => p !== existing), selected: null });
+        return;
+      }
+      const tileId = draft.selected ?? (rackLeft.length === 1 ? rackLeft[0].id : null);
+      if (tileId !== null) {
+        placeTile(tileId, cell);
+        return;
+      }
     }
-    const tileId = draft.selected ?? (rackLeft.length === 1 ? rackLeft[0].id : null);
-    if (tileId !== null) placeTile(tileId, cell);
+    // Teaching: with no tile in hand, a tap reads the square instead.
+    if (help && !view.board[cell]) setInspected(inspected === cell ? null : cell);
+  };
+
+  // Teaching: once a move is made, the coach looks back at the position it was made from.
+  const startReview = (seat: number, position: CoachPosition, move: Move) => {
+    const played = move.type === "place" ? move.placements : null;
+    const entry: Review = { seat, position, played, analysis: null };
+    setReview(entry);
+    void runCoach(position, played ? { include: played } : {}).then((analysis) =>
+      setReview((current) => (current === entry ? { ...entry, analysis } : current)),
+    );
   };
 
   const submit = async (move: Move) => {
+    const before = teaching && view.seat !== null ? positionOf(view) : null;
+    const seat = view.seat;
     setBusy(true);
     setMoveError(null);
     try {
       const error = await onMove(move);
       if (error) setMoveError({ version: view.version, error });
+      else if (before && seat !== null) startReview(seat, before, move);
     } finally {
       setBusy(false);
     }
+  };
+
+  // Shows one of the coach's ideas as a draft, ready to play or take back.
+  const preview = (next: Placement[]) => {
+    if (active) setDraft({ version: view.version, placements: next, selected: null, mode: "place", swap: [] });
   };
 
   const currentName = view.players[view.current]?.name ?? "";
@@ -193,7 +283,11 @@ export function GameTable({ view, canAct, waiting, notice, onMove, overActions }
           interactive={active && draft.mode === "place"}
           onCell={onCell}
           onDropTile={(cell, tileId) => placeTile(tileId, cell)}
+          marks={marks}
+          focusCells={focusCells}
+          inspectable={help}
         />
+        {reading && <SquareNote reading={reading} rack={rackLeft} onClose={() => setInspected(null)} />}
       </section>
 
       <ul className="area-legend legend" aria-hidden="true">
@@ -315,9 +409,19 @@ export function GameTable({ view, canAct, waiting, notice, onMove, overActions }
         )}
       </section>
 
+      <TeachingPanel
+        view={view}
+        liveHelp={liveHelp}
+        canAct={active}
+        marks={marksOn}
+        onMarks={setMarksOn}
+        review={review}
+        onPreview={preview}
+      />
+
       <section className="area-log panel">
         <h3>{t.game.lastMoves}</h3>
-        <MoveLog view={view} />
+        <MoveHistory view={view} selected={historyPick} onSelect={setHistoryPick} />
       </section>
 
       {wildFor && (
@@ -333,29 +437,6 @@ export function GameTable({ view, canAct, waiting, notice, onMove, overActions }
         />
       )}
     </div>
-  );
-}
-
-function MoveLog({ view }: { view: GameView }) {
-  const { t } = useI18n();
-  const entries = view.log.slice(-8).reverse();
-  if (entries.length === 0) return <p className="muted small">{t.game.noMoves}</p>;
-  return (
-    <ul className="log">
-      {entries.map((entry, i) => {
-        const name = view.players[entry.player]?.name ?? "";
-        if (entry.type === "place") {
-          return (
-            <li key={i}>
-              {t.log.place(name, entry.score)}
-              {entry.triolet && <span className="tag">Triolet</span>}
-              {entry.replay && <span className="tag">↻</span>}
-            </li>
-          );
-        }
-        return <li key={i} className="muted">{entry.type === "exchange" ? t.log.exchange(name, entry.count) : t.log.pass(name)}</li>;
-      })}
-    </ul>
   );
 }
 
@@ -377,12 +458,7 @@ function Recap({ view, entries }: { view: GameView; entries: LogEntry[] }) {
           <li key={i}>
             {t.recap.placed(name)}{" "}
             <span className="recap-move">
-              <span className="mini-tiles">
-                {entry.cells.map((cell) => {
-                  const tile = view.board[cell];
-                  return tile && <TileFace key={cell} value={tile.value} wild={tile.wild} />;
-                })}
-              </span>
+              <MiniTiles tiles={tilesAt(view.board, entry.cells)} />
               {t.recap.scored(entry.score)}
             </span>
             {entry.triolet && <> <span className="tag">Triolet</span></>}

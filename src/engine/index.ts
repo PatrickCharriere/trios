@@ -6,3 +6,4 @@ export * from "./movegen";
 export * from "./game";
 export * from "./view";
 export { chooseMove } from "./ai";
+export * from "./coach";

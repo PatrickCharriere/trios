@@ -25,8 +25,6 @@ export interface GameView {
   aside?: Tile[];
 }
 
-const LOG_LIMIT = 30;
-
 /**
  * What the other players have done since `seat` last played, oldest first:
  * the moves to point out when it is that player's turn again.
@@ -52,7 +50,8 @@ export function viewFor(state: GameState, seat: number | null): GameView {
     turn: state.turn,
     status: state.status,
     firstRound: inFirstRound(state),
-    log: state.log.slice(-LOG_LIMIT),
+    // The whole game, so every move can be looked back at: a few kilobytes at most.
+    log: state.log,
     endReason: state.endReason,
     finalBonus: state.finalBonus,
     winners: state.winners,

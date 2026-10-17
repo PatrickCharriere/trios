@@ -9,7 +9,7 @@ import type { Rng } from "./tiles";
  * Rough cost of the openings a move leaves behind: every new pair that an
  * opponent could finish into a trio, weighted by the square they would use.
  */
-function openingPenalty(board: readonly (PlacedTile | null)[], candidate: Candidate): number {
+export function openingPenalty(board: readonly (PlacedTile | null)[], candidate: Candidate): number {
   const filled = (r: number, c: number) =>
     board[cellAt(r, c)] !== null || candidate.evaluation.cells.includes(cellAt(r, c));
   let penalty = 0;
