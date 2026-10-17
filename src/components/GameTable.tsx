@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   EXCHANGE_MIN_BAG,
   MAX_VALUE,
@@ -10,6 +10,7 @@ import {
   readSquare,
   sinceLastTurn,
   type CoachPosition,
+  type Danger,
   type GameView,
   type LogEntry,
   type Move,
@@ -18,12 +19,13 @@ import {
   type RuleError,
 } from "@/engine";
 import { useI18n } from "@/i18n/I18nProvider";
-import { positionOf, runCoach } from "@/lib/coach/client";
+import { positionOf, runCoach, runDanger } from "@/lib/coach/client";
 import { useTeaching } from "@/lib/teaching";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 import { Board, type PendingTile, type SquareMark } from "./Board";
 import { Modal } from "./Modal";
 import { MoveHistory, tilesAt } from "./MoveHistory";
-import { SquareNote, TeachingPanel, type Review } from "./Teaching";
+import { SquareNote, TeachingPanel, type BoardAid, type DangerStatus, type Review } from "./Teaching";
 import { MiniTiles, TileFace } from "./TileFace";
 
 export interface GameTableProps {
@@ -54,11 +56,19 @@ interface Draft {
 
 const VALUES = Array.from({ length: MAX_VALUE + 1 }, (_, v) => v);
 
+/** On the danger map, squares where the next player's best averages at least this many points stand out. */
+const DANGER_FROM = 15;
+
+/** From this width the board has room on both sides: learning on the left, play on the right. */
+const WIDE = "(min-width: 1200px)";
+
 export function GameTable({ view, canAct, waiting, notice, onMove, overActions, liveHelp = false }: GameTableProps) {
   const { t } = useI18n();
   const [teaching] = useTeaching();
   const help = teaching && liveHelp;
-  const [marksOn, setMarksOn] = useState(false);
+  const [aid, setAid] = useState<BoardAid>("none");
+  const [danger, setDanger] = useState<{ board: readonly (PlacedTile | null)[]; list: Danger[] } | null>(null);
+  const wide = useMediaQuery(WIDE);
   const [inspected, setInspected] = useState<number | null>(null);
   const [historyPick, setHistoryPick] = useState<number | null>(null);
   const [review, setReview] = useState<Review | null>(null);
@@ -122,29 +132,65 @@ export function GameTable({ view, canAct, waiting, notice, onMove, overActions, 
     return next;
   }, [view.board, view.rack, placements]);
 
+  // Teaching: the danger map is worked out for the board with the draft on it,
+  // shortly after it settles; a newer position stops the older run.
+  const nextPlayer = view.current === view.seat ? (view.current + 1) % view.players.length : view.current;
+  const nextRack = view.rackCounts[nextPlayer] ?? 0;
+  useEffect(() => {
+    if (!help || aid !== "danger" || view.status !== "playing" || view.seat === null) return;
+    let stopped = false;
+    const board = boardWithDraft;
+    const timer = window.setTimeout(() => {
+      const position = { board, rack: view.rack, firstRound: view.firstRound, nextRack };
+      void runDanger(position, () => stopped).then((list) => {
+        if (list) setDanger({ board, list });
+      });
+    }, 150);
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+    };
+  }, [help, aid, view.status, view.seat, view.rack, view.firstRound, nextRack, boardWithDraft]);
+  const dangers = danger && danger.board === boardWithDraft ? danger.list.filter((d) => d.average >= DANGER_FROM) : null;
+
   const marks = useMemo(() => {
-    if (!help || !marksOn || view.status !== "playing") return undefined;
-    const inHand = view.rack.filter((tile) => !placements.some((p) => p.tileId === tile.id));
+    if (!help || view.status !== "playing") return undefined;
     const map = new Map<number, SquareMark>();
+    if (aid === "danger") {
+      for (const d of dangers ?? []) {
+        const level = d.average >= 50 ? 3 : d.average >= 30 ? 2 : 1;
+        map.set(d.cell, { label: String(d.most), kind: "danger", level, spoken: t.teach.dangerLabel(d.most) });
+      }
+      return map;
+    }
+    if (aid !== "fits") return undefined;
+    const inHand = view.rack.filter((tile) => !placements.some((p) => p.tileId === tile.id));
     for (const reading of readBoard(boardWithDraft, { firstRound: view.firstRound })) {
       const values = reading.options.map((o) => o.value);
       const fits = inHand.some((tile) => (tile.face === null ? values.length > 0 : values.includes(tile.face)));
       const trio = reading.options.find((o) => o.trio);
-      map.set(
-        reading.cell,
-        trio
-          ? { label: String(trio.value), kind: "trio", fits }
-          : values.length
-            ? { label: `≤${Math.max(...values)}`, kind: "pair", fits }
-            : { label: "✕", kind: "blocked", fits: false },
-      );
+      const label = trio ? String(trio.value) : values.length ? `≤${Math.max(...values)}` : "✕";
+      const kind = trio ? "trio" : values.length ? "pair" : "blocked";
+      map.set(reading.cell, { label, kind, fits: kind !== "blocked" && fits, spoken: t.teach.markLabel(label) });
     }
     return map;
-  }, [help, marksOn, view.status, view.rack, view.firstRound, placements, boardWithDraft]);
+  }, [help, aid, dangers, t, view.status, view.rack, view.firstRound, placements, boardWithDraft]);
+
+  const dangerStatus: DangerStatus | null =
+    aid !== "danger" ? null : !dangers ? "working" : dangers.length ? "shown" : "none";
 
   const reading = useMemo(
     () => (help && inspected !== null ? readSquare(boardWithDraft, inspected, { firstRound: view.firstRound }) : null),
     [help, inspected, boardWithDraft, view.firstRound],
+  );
+
+  const note = reading && (
+    <SquareNote
+      reading={reading}
+      rack={rackLeft}
+      danger={aid === "danger" ? dangers?.find((d) => d.cell === reading.cell) : undefined}
+      onClose={() => setInspected(null)}
+    />
   );
 
   const focusCells = useMemo(() => {
@@ -247,31 +293,150 @@ export function GameTable({ view, canAct, waiting, notice, onMove, overActions, 
   }
 
   return (
-    <div className="table">
-      <section className="area-scores panel" aria-label="Scores">
-        <ul className="scores">
-          {view.players.map((player, i) => (
-            <li key={i} className={i === view.current && view.status === "playing" ? "current" : ""}>
-              <span className="who">
-                {player.name}
-                {i === view.seat && (
-                  <>
-                    {" "}
-                    <span className="you">({t.game.you})</span>
-                  </>
-                )}
-              </span>
-              <span className="dots" role="img" aria-label={t.game.tiles(view.rackCounts[i])}>
-                {Array.from({ length: view.rackCounts[i] }, (_, k) => (
-                  <span key={k} />
-                ))}
-              </span>
-              <span className="score">{player.score}</span>
-            </li>
-          ))}
-        </ul>
-        <p className="bag">{t.game.bagCount(view.bagCount)}</p>
-      </section>
+    <div className={`table${teaching ? " learning" : ""}`}>
+      <div className="side side-play">
+        <section className="area-scores panel" aria-label="Scores">
+          <ul className="scores">
+            {view.players.map((player, i) => (
+              <li key={i} className={i === view.current && view.status === "playing" ? "current" : ""}>
+                <span className="who">
+                  {player.name}
+                  {i === view.seat && (
+                    <>
+                      {" "}
+                      <span className="you">({t.game.you})</span>
+                    </>
+                  )}
+                </span>
+                <span className="dots" role="img" aria-label={t.game.tiles(view.rackCounts[i])}>
+                  {Array.from({ length: view.rackCounts[i] }, (_, k) => (
+                    <span key={k} />
+                  ))}
+                </span>
+                <span className="score">{player.score}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="bag">{t.game.bagCount(view.bagCount)}</p>
+        </section>
+
+        <section className="area-controls panel">
+          {view.status === "over" ? (
+            <GameOver view={view} actions={overActions} notice={notice} />
+          ) : (
+            <>
+              {recent.length > 0 && <Recap view={view} entries={recent} />}
+              <p className="status" aria-live="polite">{statusLine}</p>
+              {notice && <p className="notice">{notice}</p>}
+              {view.seat !== null ? (
+                <div className="rack" role="group" aria-label={t.game.rack}>
+                  {(draft.mode === "exchange" ? view.rack : rackLeft).map((tile) => {
+                    const selected =
+                      draft.mode === "exchange" ? draft.swap.includes(tile.id) : draft.selected === tile.id;
+                    return (
+                      <button
+                        key={tile.id}
+                        type="button"
+                        className={`rack-slot${selected ? " selected" : ""}`}
+                        draggable={active && draft.mode === "place"}
+                        disabled={!active || draft.mode === "confirmPass"}
+                        aria-pressed={selected}
+                        aria-label={tile.face === null ? t.game.wild : String(tile.face)}
+                        onDragStart={(e) => e.dataTransfer.setData("text/plain", String(tile.id))}
+                        onClick={() => {
+                          if (draft.mode === "exchange") {
+                            update({
+                              swap: selected ? draft.swap.filter((id) => id !== tile.id) : [...draft.swap, tile.id],
+                            });
+                          } else {
+                            update({ selected: selected ? null : tile.id });
+                          }
+                        }}
+                      >
+                        <TileFace value={tile.face} wild={tile.face === null} />
+                      </button>
+                    );
+                  })}
+                  {draft.mode !== "exchange" &&
+                    placements.map((p) => <span key={`gap-${p.tileId}`} className="rack-slot empty" />)}
+                </div>
+              ) : (
+                <p className="muted">{t.game.spectator}</p>
+              )}
+              {canAct && (
+                <div className="actions">
+                  {draft.mode === "place" && (
+                    <>
+                      <button
+                        type="button"
+                        className="btn primary"
+                        disabled={!active || !evaluation?.ok}
+                        onClick={() => submit({ type: "place", placements })}
+                      >
+                        {t.game.play}
+                      </button>
+                      {placements.length > 0 ? (
+                        <button type="button" className="btn" disabled={!active} onClick={() => setDraft(fresh())}>
+                          {t.game.recall}
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            className="btn"
+                            disabled={!active}
+                            onClick={() => update({ mode: "exchange", swap: [], selected: null })}
+                          >
+                            {t.game.exchange}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn"
+                            disabled={!active}
+                            onClick={() => update({ mode: "confirmPass", selected: null })}
+                          >
+                            {t.game.pass}
+                          </button>
+                        </>
+                      )}
+                    </>
+                  )}
+                  {draft.mode === "exchange" && (
+                    <>
+                      <button
+                        type="button"
+                        className="btn primary"
+                        disabled={!active || draft.swap.length === 0 || bagLow}
+                        onClick={() => submit({ type: "exchange", tileIds: draft.swap })}
+                      >
+                        {t.game.swap(draft.swap.length)}
+                      </button>
+                      <button type="button" className="btn" onClick={() => setDraft(fresh())}>
+                        {t.game.cancel}
+                      </button>
+                    </>
+                  )}
+                  {draft.mode === "confirmPass" && (
+                    <>
+                      <button type="button" className="btn primary" disabled={!active} onClick={() => submit({ type: "pass" })}>
+                        {t.game.pass}
+                      </button>
+                      <button type="button" className="btn" onClick={() => setDraft(fresh())}>
+                        {t.game.cancel}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </section>
+
+        <section className="area-log panel">
+          <h3>{t.game.lastMoves}</h3>
+          <MoveHistory view={view} selected={historyPick} onSelect={setHistoryPick} />
+        </section>
+      </div>
 
       <section className="area-board">
         <Board
@@ -287,7 +452,7 @@ export function GameTable({ view, canAct, waiting, notice, onMove, overActions, 
           focusCells={focusCells}
           inspectable={help}
         />
-        {reading && <SquareNote reading={reading} rack={rackLeft} onClose={() => setInspected(null)} />}
+        {!wide && note}
       </section>
 
       <ul className="area-legend legend" aria-hidden="true">
@@ -297,132 +462,19 @@ export function GameTable({ view, canAct, waiting, notice, onMove, overActions, 
         <li><span className="key sq-centre">★</span>{t.game.legendCentre}</li>
       </ul>
 
-      <section className="area-controls panel">
-        {view.status === "over" ? (
-          <GameOver view={view} actions={overActions} notice={notice} />
-        ) : (
-          <>
-            {recent.length > 0 && <Recap view={view} entries={recent} />}
-            <p className="status" aria-live="polite">{statusLine}</p>
-            {notice && <p className="notice">{notice}</p>}
-            {view.seat !== null ? (
-              <div className="rack" role="group" aria-label={t.game.rack}>
-                {(draft.mode === "exchange" ? view.rack : rackLeft).map((tile) => {
-                  const selected =
-                    draft.mode === "exchange" ? draft.swap.includes(tile.id) : draft.selected === tile.id;
-                  return (
-                    <button
-                      key={tile.id}
-                      type="button"
-                      className={`rack-slot${selected ? " selected" : ""}`}
-                      draggable={active && draft.mode === "place"}
-                      disabled={!active || draft.mode === "confirmPass"}
-                      aria-pressed={selected}
-                      aria-label={tile.face === null ? t.game.wild : String(tile.face)}
-                      onDragStart={(e) => e.dataTransfer.setData("text/plain", String(tile.id))}
-                      onClick={() => {
-                        if (draft.mode === "exchange") {
-                          update({
-                            swap: selected ? draft.swap.filter((id) => id !== tile.id) : [...draft.swap, tile.id],
-                          });
-                        } else {
-                          update({ selected: selected ? null : tile.id });
-                        }
-                      }}
-                    >
-                      <TileFace value={tile.face} wild={tile.face === null} />
-                    </button>
-                  );
-                })}
-                {draft.mode !== "exchange" &&
-                  placements.map((p) => <span key={`gap-${p.tileId}`} className="rack-slot empty" />)}
-              </div>
-            ) : (
-              <p className="muted">{t.game.spectator}</p>
-            )}
-            {canAct && (
-              <div className="actions">
-                {draft.mode === "place" && (
-                  <>
-                    <button
-                      type="button"
-                      className="btn primary"
-                      disabled={!active || !evaluation?.ok}
-                      onClick={() => submit({ type: "place", placements })}
-                    >
-                      {t.game.play}
-                    </button>
-                    {placements.length > 0 ? (
-                      <button type="button" className="btn" disabled={!active} onClick={() => setDraft(fresh())}>
-                        {t.game.recall}
-                      </button>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          className="btn"
-                          disabled={!active}
-                          onClick={() => update({ mode: "exchange", swap: [], selected: null })}
-                        >
-                          {t.game.exchange}
-                        </button>
-                        <button
-                          type="button"
-                          className="btn"
-                          disabled={!active}
-                          onClick={() => update({ mode: "confirmPass", selected: null })}
-                        >
-                          {t.game.pass}
-                        </button>
-                      </>
-                    )}
-                  </>
-                )}
-                {draft.mode === "exchange" && (
-                  <>
-                    <button
-                      type="button"
-                      className="btn primary"
-                      disabled={!active || draft.swap.length === 0 || bagLow}
-                      onClick={() => submit({ type: "exchange", tileIds: draft.swap })}
-                    >
-                      {t.game.swap(draft.swap.length)}
-                    </button>
-                    <button type="button" className="btn" onClick={() => setDraft(fresh())}>
-                      {t.game.cancel}
-                    </button>
-                  </>
-                )}
-                {draft.mode === "confirmPass" && (
-                  <>
-                    <button type="button" className="btn primary" disabled={!active} onClick={() => submit({ type: "pass" })}>
-                      {t.game.pass}
-                    </button>
-                    <button type="button" className="btn" onClick={() => setDraft(fresh())}>
-                      {t.game.cancel}
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-          </>
-        )}
-      </section>
-
-      <TeachingPanel
-        view={view}
-        liveHelp={liveHelp}
-        canAct={active}
-        marks={marksOn}
-        onMarks={setMarksOn}
-        review={review}
-        onPreview={preview}
-      />
-
-      <section className="area-log panel">
-        <h3>{t.game.lastMoves}</h3>
-        <MoveHistory view={view} selected={historyPick} onSelect={setHistoryPick} />
-      </section>
+      <div className="side side-learn">
+        <TeachingPanel
+          view={view}
+          liveHelp={liveHelp}
+          canAct={active}
+          aid={aid}
+          onAid={setAid}
+          danger={dangerStatus}
+          note={wide ? note : null}
+          review={review}
+          onPreview={preview}
+        />
+      </div>
 
       {wildFor && (
         <WildPicker

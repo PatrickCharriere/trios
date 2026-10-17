@@ -4,6 +4,7 @@ import {
   CENTRE,
   TRIOS_OF_15,
   analyse,
+  dangerMap,
   applyMove,
   cellAt,
   chooseMove,
@@ -182,6 +183,43 @@ describe("analyse", () => {
     });
     expect(performance.now() - started).toBeLessThan(3000);
     expect(analysis.ideas[0].value).toBeGreaterThanOrEqual(analysis.greedy!.value);
+  });
+});
+
+describe("dangerMap", () => {
+  // After 5 + 5 just under the x3 at the top of column 4.
+  const fives = Array.from({ length: 10 }, (_, i): Tile => ({ id: 600 + i, face: 5 }));
+  const opened = {
+    board: board([
+      [2, 4, 5],
+      [3, 4, 5],
+    ]),
+    rack: [] as Tile[],
+    firstRound: false,
+    nextRack: 1,
+    unseen: fives,
+  };
+
+  it("shows where the next player's best moves would score", () => {
+    const danger = dangerMap(opened);
+    // A 5 on the x3 above completes the trio for 90; on the x2 below, for 60.
+    expect(danger[0]).toEqual({ cell: cellAt(1, 4), average: 90, most: 90 });
+    expect(danger.find((d) => d.cell === cellAt(4, 4))).toEqual({ cell: cellAt(4, 4), average: 60, most: 60 });
+    const averages = danger.map((d) => d.average);
+    expect(averages).toEqual([...averages].sort((a, b) => b - a));
+  });
+
+  it("averages over the racks the next player might hold, the same way every time", () => {
+    const real = { ...opened, unseen: undefined, nextRack: 3 };
+    const first = dangerMap(real);
+    expect(dangerMap(real)).toEqual(first);
+    const top = first.find((d) => d.cell === cellAt(1, 4))!;
+    expect(top.most).toBeGreaterThanOrEqual(90);
+    expect(top.average).toBeLessThanOrEqual(top.most);
+  });
+
+  it("is empty when the next player has no tiles", () => {
+    expect(dangerMap({ ...opened, nextRack: 0 })).toEqual([]);
   });
 });
 

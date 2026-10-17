@@ -18,12 +18,19 @@ export interface PendingTile {
   wild: boolean;
 }
 
-/** Teaching mode's label for an open square: the value a trio needs, the most a pair allows, or ✕. */
+/**
+ * Teaching mode's label for an open square: the value a trio needs, the most a
+ * pair allows or ✕; or, on the danger map, the most the next player could score there.
+ */
 export interface SquareMark {
   label: string;
-  kind: "trio" | "pair" | "blocked";
+  kind: "trio" | "pair" | "blocked" | "danger";
   /** One of the player's tiles can go here. */
-  fits: boolean;
+  fits?: boolean;
+  /** How strongly a danger square stands out, from 1 to 3. */
+  level?: 1 | 2 | 3;
+  /** What a screen reader says for the label. */
+  spoken: string;
 }
 
 interface BoardProps {
@@ -95,7 +102,7 @@ export function Board({
             t.game.cellLabel(rowOf(cell) + 1, colOf(cell) + 1),
             squareName[square],
             placed ? String(placed.value) : draft ? String(draft.value ?? "") : "",
-            mark ? t.teach.markLabel(mark.label) : "",
+            mark?.spoken ?? "",
           ]
             .filter(Boolean)
             .join(", ");
@@ -130,7 +137,10 @@ export function Board({
               ) : draft ? (
                 <TileFace value={draft.value} wild={draft.wild} state={pendingValid ? "valid" : "pending"} />
               ) : mark ? (
-                <span className={`hint hint-${mark.kind}${mark.fits ? " fits" : ""}`} aria-hidden="true">
+                <span
+                  className={`hint hint-${mark.kind}${mark.fits ? " fits" : ""}${mark.level ? ` level-${mark.level}` : ""}`}
+                  aria-hidden="true"
+                >
                   {mark.label}
                 </span>
               ) : (

@@ -508,6 +508,25 @@ input {
   opacity: 0.45;
 }
 
+/* Danger map: the most the next player could score through a square, deeper red the likelier. */
+.cell .hint-danger {
+  padding: 0.35cqw 0.55cqw;
+  border-radius: 0.6cqw;
+  background: #f97316;
+  color: #ffffff;
+  font-size: 2.6cqw;
+  box-shadow: 0 0 0 0.3cqw rgb(255 255 255 / 0.85);
+}
+
+.cell .hint-danger.level-2 {
+  background: #e11d48;
+}
+
+.cell .hint-danger.level-3 {
+  background: #7f1d1d;
+  font-size: 2.9cqw;
+}
+
 .cell .hint.fits {
   outline: 0.4cqw solid var(--mark-valid);
   outline-offset: 0.3cqw;
@@ -598,6 +617,12 @@ input {
   align-items: flex-start;
 }
 
+/* The two side groups only exist as columns on wide screens; below that their
+   panels take their own places in the grid. */
+.side {
+  display: contents;
+}
+
 @media (min-width: 900px) {
   .table {
     grid-template-columns: minmax(0, 1fr) 330px;
@@ -609,6 +634,43 @@ input {
       "board log"
       "legend log";
     align-items: start;
+  }
+}
+
+/* Wide screens in teaching mode: learning on the left of the board, play and
+   the move history on the right. Both columns stay in view beside the board
+   and scroll on their own if needed. */
+@media (min-width: 1200px) {
+  .page:has(.table.learning),
+  body:has(.table.learning) .site-header {
+    max-width: 1680px;
+  }
+
+  .table.learning {
+    grid-template-columns: clamp(250px, 21vw, 330px) minmax(0, 1fr) clamp(270px, 22vw, 340px);
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      "learn board play"
+      "learn legend play";
+    align-items: start;
+  }
+
+  .table.learning .side {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    position: sticky;
+    top: 12px;
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
+  }
+
+  .side-learn {
+    grid-area: learn;
+  }
+
+  .side-play {
+    grid-area: play;
   }
 }
 
@@ -766,6 +828,11 @@ input {
 }
 
 .note-summary {
+  font-weight: 700;
+}
+
+.note-danger {
+  color: var(--bad);
   font-weight: 700;
 }
 

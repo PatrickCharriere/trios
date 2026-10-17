@@ -280,6 +280,14 @@ function bestScore(board: Board, rack: readonly Tile[], firstRound: boolean): nu
   return best;
 }
 
+/** Runs a stepped computation to the end in one go. */
+function finish<T>(steps: Generator<void, T>): T {
+  for (;;) {
+    const step = steps.next();
+    if (step.done) return step.value;
+  }
+}
+
 /**
  * Ranks the player's possible moves. Every legal move gets a quick look; the
  * most promising few, the top scorer and `include` then get the full one: the
@@ -287,11 +295,7 @@ function bestScore(board: Board, rack: readonly Tile[], firstRound: boolean): nu
  * move does to the board is measured: squares opened or closed, squares of four formed.
  */
 export function analyse(position: CoachPosition, options: CoachOptions = {}): Analysis {
-  const steps = analysisSteps(position, options);
-  for (;;) {
-    const step = steps.next();
-    if (step.done) return step.value;
-  }
+  return finish(analysisSteps(position, options));
 }
 
 /**
@@ -354,6 +358,56 @@ export function* analysisSteps(position: CoachPosition, options: CoachOptions = 
     greedy: rated.get(greedy) ?? null,
     included: included ? (rated.get(included) ?? null) : null,
   };
+}
+
+/** How much the next player could score with a move through one empty square. */
+export interface Danger {
+  cell: number;
+  /** Their best score through this square, averaged over the racks they might hold (counting 0 when they can't play here). */
+  average: number;
+  /** The most they could score through it with any of those racks. */
+  most: number;
+}
+
+export interface DangerOptions {
+  /** How many racks to try for the next player. */
+  samples?: number;
+  seed?: number;
+}
+
+/**
+ * Where the next player could score after this position (a draft move can be
+ * placed on the board first): the squares their best moves would go through,
+ * most dangerous first. Only the racks they might hold are known, so each
+ * square gets the average of their best score there and the most.
+ */
+export function dangerMap(position: CoachPosition, options: DangerOptions = {}): Danger[] {
+  return finish(dangerSteps(position, options));
+}
+
+/** The danger map in small steps, pausing after each rack tried. */
+export function* dangerSteps(position: CoachPosition, options: DangerOptions = {}): Generator<void, Danger[]> {
+  const { samples = 24 } = options;
+  const racks = sampleRacks(position, samples, seededRng(options.seed ?? hashPosition(position)));
+  const total = new Map<number, number>();
+  const most = new Map<number, number>();
+  for (const rack of racks) {
+    // Each rack's best score through each square it can use.
+    const best = new Map<number, number>();
+    for (const c of generateMoves(position.board, rack, { noSquares: position.firstRound })) {
+      for (const cell of c.evaluation.cells) {
+        if (c.evaluation.score > (best.get(cell) ?? -1)) best.set(cell, c.evaluation.score);
+      }
+    }
+    for (const [cell, score] of best) {
+      total.set(cell, (total.get(cell) ?? 0) + score);
+      most.set(cell, Math.max(most.get(cell) ?? 0, score));
+    }
+    yield;
+  }
+  return [...total]
+    .map(([cell, sum]) => ({ cell, average: sum / racks.length, most: most.get(cell)! }))
+    .sort((a, b) => b.average - a.average || a.cell - b.cell);
 }
 
 /** Why `idea` beats `other`, most telling first. */

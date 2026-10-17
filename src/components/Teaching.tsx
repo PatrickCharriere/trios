@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   MAX_VALUE,
   TRIOS_OF_15,
@@ -8,6 +8,7 @@ import {
   reasons,
   type Analysis,
   type CoachPosition,
+  type Danger,
   type GameView,
   type Idea,
   type Placement,
@@ -21,6 +22,12 @@ import { useTeaching } from "@/lib/teaching";
 import { Board, type PendingTile } from "./Board";
 import { Modal } from "./Modal";
 import { MiniTiles } from "./TileFace";
+
+/** What the board shows on its open squares in teaching mode. */
+export type BoardAid = "none" | "fits" | "danger";
+
+/** Where the danger map is up to: being worked out, nothing worth showing, or shown. */
+export type DangerStatus = "working" | "none" | "shown";
 
 /** The coach's look back at a move the player just made. */
 export interface Review {
@@ -62,10 +69,13 @@ function Reasons({ items }: { items: Reason[] }) {
 export function SquareNote({
   reading,
   rack,
+  danger,
   onClose,
 }: {
   reading: SquareReading;
   rack: readonly Tile[];
+  /** On the danger map: what the next player could score through this square. */
+  danger?: Danger;
   onClose: () => void;
 }) {
   const { t } = useI18n();
@@ -103,6 +113,9 @@ export function SquareNote({
       <button type="button" className="note-close" onClick={onClose} aria-label={t.close}>
         ×
       </button>
+      {danger && (
+        <p className="note-danger">{say.danger(danger.most, Math.round(danger.average))}</p>
+      )}
       {lines.map((text, i) => (
         <p key={i}>{text}</p>
       ))}
@@ -296,16 +309,29 @@ function CompareDialog({ review, onClose }: { review: Review; onClose: () => voi
 
 interface TeachingPanelProps {
   view: GameView;
-  /** Ideas, square reading and what fits: only where they can't tip a game against other people. */
+  /** Ideas, square reading and the board aids: only where they can't tip a game against other people. */
   liveHelp: boolean;
   canAct: boolean;
-  marks: boolean;
-  onMarks: (on: boolean) => void;
+  aid: BoardAid;
+  onAid: (aid: BoardAid) => void;
+  danger: DangerStatus | null;
   review: Review | null;
   onPreview: (placements: Placement[]) => void;
+  /** The note on a tapped square, shown here when the board leaves no room under it. */
+  note?: ReactNode;
 }
 
-export function TeachingPanel({ view, liveHelp, canAct, marks, onMarks, review, onPreview }: TeachingPanelProps) {
+export function TeachingPanel({
+  view,
+  liveHelp,
+  canAct,
+  aid,
+  onAid,
+  danger,
+  review,
+  onPreview,
+  note,
+}: TeachingPanelProps) {
   const { t } = useI18n();
   const [teaching, setTeaching] = useTeaching();
   const [ideas, setIdeas] = useState<{ version: number; analysis: Analysis | null } | null>(null);
@@ -356,11 +382,30 @@ export function TeachingPanel({ view, liveHelp, canAct, marks, onMarks, review, 
               {t.teach.askIdea}
             </button>
           )}
-          <button type="button" className="btn small-btn" aria-pressed={marks} onClick={() => onMarks(!marks)}>
-            {marks ? t.teach.hideMarks : t.teach.showMarks}
+          <button
+            type="button"
+            className="btn small-btn"
+            aria-pressed={aid === "fits"}
+            onClick={() => onAid(aid === "fits" ? "none" : "fits")}
+          >
+            {aid === "fits" ? t.teach.hideMarks : t.teach.showMarks}
+          </button>
+          <button
+            type="button"
+            className="btn small-btn danger-toggle"
+            aria-pressed={aid === "danger"}
+            onClick={() => onAid(aid === "danger" ? "none" : "danger")}
+          >
+            {aid === "danger" ? t.teach.hideDanger : t.teach.showDanger}
           </button>
         </div>
       )}
+      {liveHelp && playing && aid === "danger" && (
+        <p className="muted small">
+          {danger === "working" ? t.teach.dangerWorking : danger === "none" ? t.teach.dangerNone : t.teach.dangerHint}
+        </p>
+      )}
+      {note}
       {liveHelp && shown && <Ideas analysis={shown.analysis} rack={view.rack} onPreview={onPreview} />}
       {myReview && <ReviewNote review={myReview} onCompare={() => setComparing(true)} />}
       {view.seat !== null && playing && <TriosSheet rack={view.rack} />}

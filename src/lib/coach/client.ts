@@ -1,16 +1,28 @@
-import { analysisSteps, type Analysis, type CoachOptions, type CoachPosition, type GameView } from "@/engine";
+import {
+  analysisSteps,
+  dangerSteps,
+  type Analysis,
+  type CoachOptions,
+  type CoachPosition,
+  type Danger,
+  type GameView,
+} from "@/engine";
 
 /** How long the coach works before letting the page handle taps and redraw. */
 const SLICE_MS = 12;
 
 /**
- * Asks the coach about a position. Its look ahead runs in short slices between
- * the page's own work, so the game stays responsive while it thinks.
+ * Runs stepped work in short slices between the page's own work, so the game
+ * stays responsive while the coach thinks. Resolves to null if `stopped`
+ * turns true first (the position changed, so the answer would be stale).
  */
-export function runCoach(position: CoachPosition, options: CoachOptions = {}): Promise<Analysis> {
-  const steps = analysisSteps(position, options);
+function sliced<T>(steps: Generator<void, T>, stopped: () => boolean): Promise<T | null> {
   return new Promise((resolve) => {
     const slice = () => {
+      if (stopped()) {
+        resolve(null);
+        return;
+      }
       const until = performance.now() + SLICE_MS;
       for (;;) {
         const step = steps.next();
@@ -25,6 +37,14 @@ export function runCoach(position: CoachPosition, options: CoachOptions = {}): P
     window.setTimeout(slice, 0);
   });
 }
+
+/** Asks the coach for its ideas about a position. */
+export const runCoach = (position: CoachPosition, options: CoachOptions = {}): Promise<Analysis> =>
+  sliced(analysisSteps(position, options), () => false) as Promise<Analysis>;
+
+/** Where the next player could score big, or null if stopped first. */
+export const runDanger = (position: CoachPosition, stopped: () => boolean): Promise<Danger[] | null> =>
+  sliced(dangerSteps(position), stopped);
 
 /** The position as the player in `view.seat` sees it. */
 export function positionOf(view: GameView): CoachPosition | null {
