@@ -11,9 +11,11 @@ import {
   inFirstRound,
   isBoardDead,
   seededRng,
+  sinceLastTurn,
   viewFor,
   type BotLevel,
   type GameState,
+  type LogEntry,
 } from "./index";
 
 const two = [
@@ -302,6 +304,32 @@ describe("viewFor", () => {
     expect(viewFor(over, null).aside).toHaveLength(SET_ASIDE);
     // Games saved before the tiles were kept have nothing to show.
     expect(viewFor({ ...over, aside: undefined }, 0).aside).toBeUndefined();
+  });
+});
+
+describe("sinceLastTurn", () => {
+  const place = (player: number): LogEntry => ({
+    type: "place",
+    player,
+    cells: [],
+    score: 0,
+    groups: [],
+    triolet: false,
+    replay: false,
+  });
+  const pass = (player: number): LogEntry => ({ type: "pass", player });
+
+  it("lists what the others did after the seat's last move", () => {
+    const log = [place(0), place(1), place(1), pass(2), place(0), place(2), pass(1)];
+    expect(sinceLastTurn(log, 0)).toEqual([place(2), pass(1)]);
+    expect(sinceLastTurn(log, 1)).toEqual([]);
+    expect(sinceLastTurn(log, 2)).toEqual([pass(1)]);
+  });
+
+  it("covers the whole log before the seat's first move, and nothing without a seat", () => {
+    const log = [place(1), pass(2)];
+    expect(sinceLastTurn(log, 0)).toEqual(log);
+    expect(sinceLastTurn(log, null)).toEqual([]);
   });
 });
 

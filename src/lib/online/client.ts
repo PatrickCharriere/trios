@@ -41,6 +41,29 @@ export const api = {
   rematch: (id: string, token: string) => call<Snapshot>(`/api/games/${id}/rematch`, { body: {}, token }),
 };
 
+const FAST_POLL_MS = 1500;
+const SLOW_POLL_MS = 8000;
+const HIDDEN_POLL_MS = 6000;
+const HIDDEN_LATER_POLL_MS = 60_000;
+const HIDDEN_SLOWER_AFTER_MS = 10 * 60_000;
+const HIDDEN_STOP_AFTER_MS = 2 * 60 * 60_000;
+
+/**
+ * How long a game page waits before checking for news again, or null to stop
+ * until the page is in view again. `waiting` is true while the others play (or
+ * before the game starts); `hiddenFor` is how long the tab has been in the
+ * background, or null when it's in view. In view: every 1.5 s while waiting,
+ * every 8 s on the player's own turn, as nothing changes on the server then.
+ * In the background, only while waiting, so the your-turn chime still comes:
+ * every 6 s, every minute after ten minutes, and not at all after two hours,
+ * so a forgotten tab can't use up the store's free quota.
+ */
+export function pollDelay(waiting: boolean, hiddenFor: number | null): number | null {
+  if (hiddenFor === null) return waiting ? FAST_POLL_MS : SLOW_POLL_MS;
+  if (!waiting || hiddenFor >= HIDDEN_STOP_AFTER_MS) return null;
+  return hiddenFor < HIDDEN_SLOWER_AFTER_MS ? HIDDEN_POLL_MS : HIDDEN_LATER_POLL_MS;
+}
+
 const SEATS_KEY = "trios.seats.v1";
 
 export interface SavedSeat {

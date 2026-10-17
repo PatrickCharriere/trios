@@ -7,13 +7,11 @@ import type { Move, RuleError } from "@/engine";
 import { useI18n } from "@/i18n/I18nProvider";
 import { errorMessage } from "@/i18n/messages";
 import { markOnlineExpired, recordOnlineGame } from "@/lib/history";
-import { ApiFailure, api, loadName, loadSeat, saveName, saveSeat, type SavedSeat } from "@/lib/online/client";
+import { ApiFailure, api, loadName, loadSeat, pollDelay, saveName, saveSeat, type SavedSeat } from "@/lib/online/client";
 import { MAX_NAME, type Snapshot } from "@/lib/online/protocol";
+import { useTurnAlert } from "@/lib/useGameAlerts";
 import { useHydrated } from "@/lib/useHydrated";
 import { GameTable } from "./GameTable";
-
-const FAST_POLL_MS = 1500;
-const SLOW_POLL_MS = 8000;
 
 type Fatal = "notFound" | "unavailable";
 
@@ -45,43 +43,54 @@ function OnlineGameLoaded({ id }: { id: string }) {
   // Nothing changes on the server while it's our move, so poll gently then.
   const pollFast = !myTurn && view?.status !== "over";
 
+  // The others play elsewhere, so a chime tells the player their turn has come.
+  // Local games go without: the player is already watching.
+  useTurnAlert(snap, myTurn, t.game.yourTurnTitle);
+
   useEffect(() => {
     let stopped = false;
     let timer: number | undefined;
+    let hiddenSince = document.hidden ? Date.now() : null;
     const tick = async () => {
       window.clearTimeout(timer);
       if (stopped) return;
-      if (!document.hidden) {
-        try {
-          const result = await api.poll(id, token, rev.current);
-          if (stopped) return;
-          if (!result.unchanged) {
-            rev.current = result.snapshot.rev;
-            setSnap(result.snapshot);
-            recordOnlineGame(result.snapshot);
-          }
-          setNotice(null);
-        } catch (error) {
-          if (stopped) return;
-          if (error instanceof ApiFailure && (error.code === "notFound" || error.code === "unavailable")) {
-            if (error.code === "notFound") markOnlineExpired(id);
-            setFatal(error.code);
-            return;
-          }
-          setNotice("network");
+      const delay = pollDelay(pollFast, hiddenSince === null ? null : Date.now() - hiddenSince);
+      // In the background on our own turn, or for a long while: wait for the player to come back.
+      if (delay === null) return;
+      try {
+        const result = await api.poll(id, token, rev.current);
+        if (stopped) return;
+        if (!result.unchanged) {
+          rev.current = result.snapshot.rev;
+          setSnap(result.snapshot);
+          recordOnlineGame(result.snapshot);
         }
+        setNotice(null);
+      } catch (error) {
+        if (stopped) return;
+        if (error instanceof ApiFailure && (error.code === "notFound" || error.code === "unavailable")) {
+          if (error.code === "notFound") markOnlineExpired(id);
+          setFatal(error.code);
+          return;
+        }
+        setNotice("network");
       }
-      timer = window.setTimeout(tick, pollFast ? FAST_POLL_MS : SLOW_POLL_MS);
+      timer = window.setTimeout(tick, delay);
     };
     tick();
-    const onVisible = () => {
-      if (!document.hidden) tick();
+    const onVisibility = () => {
+      if (document.hidden) {
+        hiddenSince ??= Date.now();
+      } else {
+        hiddenSince = null;
+        tick();
+      }
     };
-    document.addEventListener("visibilitychange", onVisible);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       stopped = true;
       window.clearTimeout(timer);
-      document.removeEventListener("visibilitychange", onVisible);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
     // Restarting on a speed change means our own move is followed by fast polling at once.
   }, [id, token, pollFast]);

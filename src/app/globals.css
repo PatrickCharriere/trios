@@ -12,6 +12,11 @@
   --bad-ink: #ffffff;
   --shadow: 0 1px 2px rgb(5 30 60 / 0.1), 0 6px 18px rgb(5 30 60 / 0.08);
   --radius: 14px;
+  /* The page background: a faint grid of dots and soft washes of the board's colours. */
+  --dots: rgb(0 72 125 / 0.13);
+  --wash-1: rgb(245 197 24 / 0.16);
+  --wash-2: rgb(1 97 172 / 0.11);
+  --wash-3: rgb(240 138 28 / 0.12);
 
   /* The board is a physical object, so it keeps the same colours in both themes:
      dark blue frame, blue squares and silver lines as in the triolets project,
@@ -27,9 +32,12 @@
   --replay: #f08a1c;
   --replay-ink: #2d1500;
   --mark-last: #ffffff;
+  --mark-glow: rgb(255 255 255 / 0.6);
   --mark-pending: #f8af00;
   --mark-valid: #34d27b;
   --mark-error: #ff4d3d;
+  /* Teaching mode: the square being read, or the move picked in the history. */
+  --mark-focus: #3fd0ff;
 
   /* Square wooden tiles. */
   --tile-hi: #fbf1d9;
@@ -41,8 +49,10 @@
   color-scheme: light;
 }
 
+/* Dark colours follow the system unless a theme is picked in the settings,
+   which sets data-theme on the page. Keep these two blocks the same. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #071827;
     --surface: #0e2539;
     --surface-2: #143350;
@@ -55,22 +65,63 @@
     --bad: #ff7d6b;
     --bad-ink: #1a0603;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.45), 0 6px 18px rgb(0 0 0 / 0.3);
+    --dots: rgb(150 195 240 / 0.08);
+    --wash-1: rgb(245 197 24 / 0.05);
+    --wash-2: rgb(79 163 227 / 0.09);
+    --wash-3: rgb(240 138 28 / 0.05);
     color-scheme: dark;
   }
+}
+
+:root[data-theme="dark"] {
+  --bg: #071827;
+  --surface: #0e2539;
+  --surface-2: #143350;
+  --ink: #e6f0fa;
+  --muted: #9fb6cc;
+  --line: #23435f;
+  --accent: #4fa3e3;
+  --accent-ink: #04121f;
+  --good: #5ed39a;
+  --bad: #ff7d6b;
+  --bad-ink: #1a0603;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.45), 0 6px 18px rgb(0 0 0 / 0.3);
+  --dots: rgb(150 195 240 / 0.08);
+  --wash-1: rgb(245 197 24 / 0.05);
+  --wash-2: rgb(79 163 227 / 0.09);
+  --wash-3: rgb(240 138 28 / 0.05);
+  color-scheme: dark;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  background: var(--bg);
+}
+
 html,
 body {
   margin: 0;
-  background: var(--bg);
   color: var(--ink);
   font-family: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Fixed behind the page, so the dots stay put as it scrolls. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle, var(--dots) 1px, transparent 1.5px) 0 0 / 22px 22px,
+    radial-gradient(ellipse 60% 55% at 0% 0%, var(--wash-1), transparent),
+    radial-gradient(ellipse 55% 50% at 100% 10%, var(--wash-2), transparent),
+    radial-gradient(ellipse 60% 50% at 80% 100%, var(--wash-3), transparent);
 }
 
 h1,
@@ -218,6 +269,21 @@ p {
   font-variant: small-caps;
 }
 
+.settings-btn > span:first-child {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+@media (max-width: 560px) {
+  .btn.settings-btn {
+    padding-inline: 12px;
+  }
+
+  .settings-label {
+    display: none;
+  }
+}
+
 :focus-visible {
   outline: 3px solid var(--ink);
   outline-offset: 2px;
@@ -240,7 +306,7 @@ p {
   font-weight: 600;
 }
 
-input {
+input:not([type="checkbox"], [type="radio"]) {
   font: inherit;
   font-size: 16px;
   padding: 10px 12px;
@@ -423,14 +489,127 @@ input {
   font-size: 3.6cqw;
 }
 
-/* The previous move gets a white frame around its squares; your own draft tiles get rings. */
+/* Tiles placed since your last turn: a white ring and a glow that pulses as they land,
+   three times, or until the next move with the blink setting on. Only the glow's
+   opacity changes, so the board isn't repainted on every frame while it blinks.
+   Raised above the neighbouring squares so the ring and glow aren't hidden. */
 .cell.last {
-  box-shadow: inset 0 0 0 2px var(--mark-last);
+  z-index: 1;
+}
+
+.cell.last .token {
+  box-shadow:
+    0 0 0 2px var(--edge),
+    0 0 0 5px var(--mark-last),
+    0 0 12px 5px var(--mark-glow);
+  animation: land 0.4s ease-out;
+}
+
+.cell.last .token::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    0 0 0 6px var(--mark-last),
+    0 0 20px 10px var(--mark-glow);
+  opacity: 0;
+  pointer-events: none;
+  animation: glow 1.2s ease-in-out 0.4s 3;
+}
+
+.table.blink .cell.last .token::after {
+  animation: glow 1.6s ease-in-out 0.4s infinite;
+}
+
+@keyframes land {
+  from {
+    transform: scale(0.5);
+  }
+  70% {
+    transform: scale(1.15);
+  }
+}
+
+@keyframes glow {
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cell.last .token,
+  .cell.last .token::after,
+  .table.blink .cell.last .token::after {
+    animation: none;
+  }
 }
 
 .cell.error {
   box-shadow: inset 0 0 0 3px var(--mark-error);
   z-index: 1;
+}
+
+/* Teaching mode: the square being read, or the tiles of a move picked in the history. */
+.cell.focus {
+  z-index: 2;
+  box-shadow: inset 0 0 0 3px var(--mark-focus);
+}
+
+.cell.focus .token {
+  box-shadow:
+    0 0 0 2px var(--edge),
+    0 0 0 5px var(--mark-focus);
+}
+
+/* Teaching mode labels on open squares: the value a trio needs, the most a pair allows, or ✕.
+   They take the square's own ink, so they read on every colour of square. */
+.cell .hint {
+  font-size: 2.4cqw;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.cell .hint-trio {
+  padding: 0.35cqw 0.55cqw;
+  border-radius: 0.6cqw;
+  background: #fff3c4;
+  color: #3a2c00;
+  font-size: 2.8cqw;
+}
+
+.cell .hint-pair {
+  opacity: 0.9;
+}
+
+.cell .hint-blocked {
+  opacity: 0.45;
+}
+
+/* Danger map: the most the next player could score through a square, deeper red the likelier. */
+.cell .hint-danger {
+  padding: 0.35cqw 0.55cqw;
+  border-radius: 0.6cqw;
+  background: #f97316;
+  color: #ffffff;
+  font-size: 2.6cqw;
+  box-shadow: 0 0 0 0.3cqw rgb(255 255 255 / 0.85);
+}
+
+.cell .hint-danger.level-2 {
+  background: #e11d48;
+}
+
+.cell .hint-danger.level-3 {
+  background: #7f1d1d;
+  font-size: 2.9cqw;
+}
+
+.cell .hint.fits {
+  outline: 0.4cqw solid var(--mark-valid);
+  outline-offset: 0.3cqw;
+  border-radius: 0.6cqw;
 }
 
 .cell[aria-disabled="false"]:hover {
@@ -474,6 +653,7 @@ input {
     "scores"
     "board"
     "controls"
+    "teach"
     "legend"
     "log";
 }
@@ -505,16 +685,71 @@ input {
   grid-area: log;
 }
 
+.area-teach {
+  grid-area: teach;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.area-teach:not(.panel) {
+  align-items: flex-start;
+}
+
+/* The two side groups only exist as columns on wide screens; below that their
+   panels take their own places in the grid. */
+.side {
+  display: contents;
+}
+
 @media (min-width: 900px) {
   .table {
     grid-template-columns: minmax(0, 1fr) 330px;
-    grid-template-rows: auto auto 1fr auto;
+    grid-template-rows: auto auto auto 1fr auto;
     grid-template-areas:
       "board scores"
       "board controls"
+      "board teach"
       "board log"
       "legend log";
     align-items: start;
+  }
+}
+
+/* Wide screens in teaching mode: learning on the left of the board, play and
+   the move history on the right. Both columns stay in view beside the board
+   and scroll on their own if needed. */
+@media (min-width: 1200px) {
+  .page:has(.table.learning),
+  body:has(.table.learning) .site-header {
+    max-width: 1680px;
+  }
+
+  .table.learning {
+    grid-template-columns: clamp(250px, 21vw, 330px) minmax(0, 1fr) clamp(270px, 22vw, 340px);
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      "learn board play"
+      "learn legend play";
+    align-items: start;
+  }
+
+  .table.learning .side {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    position: sticky;
+    top: 12px;
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
+  }
+
+  .side-learn {
+    grid-area: learn;
+  }
+
+  .side-play {
+    grid-area: play;
   }
 }
 
@@ -530,7 +765,7 @@ input {
 
 .scores li {
   display: grid;
-  grid-template-columns: 1fr auto 3.5ch;
+  grid-template-columns: minmax(0, 1fr) auto minmax(3.5ch, auto);
   align-items: center;
   gap: 10px;
   padding: 6px 10px;
@@ -543,10 +778,17 @@ input {
   border-left-color: var(--accent);
 }
 
+/* Long names wrap rather than being cut off; "(you)" moves to the next line as a whole. */
 .scores .who {
   font-weight: 650;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.25;
+  overflow-wrap: break-word;
+}
+
+.scores .you {
+  color: var(--muted);
+  font-size: 0.85em;
+  font-weight: 500;
   white-space: nowrap;
 }
 
@@ -587,10 +829,24 @@ input {
     gap: 6px;
   }
 
+  /* The score moves under the name when the name's longest word can't fit beside it,
+     so words are never split. */
   .scores li {
     flex: 1 1 140px;
-    grid-template-columns: minmax(0, 1fr) auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0 8px;
     padding: 4px 8px;
+  }
+
+  .scores .who {
+    flex: 1 1 0;
+    max-width: 100%;
+  }
+
+  .scores .score {
+    margin-left: auto;
   }
 
   .scores .dots {
@@ -604,6 +860,249 @@ input {
 
 .status {
   min-height: 1.5em;
+}
+
+/* What the others played since your last turn, just above your rack. */
+.recap {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Teaching mode */
+.teach-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.teach-head h3 {
+  font-size: 0.95rem;
+}
+
+.area-teach p {
+  margin: 0;
+}
+
+.board-note {
+  position: relative;
+  margin-top: 10px;
+  padding: 10px 40px 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--mark-focus);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+
+.board-note p {
+  margin: 0;
+}
+
+.note-summary {
+  font-weight: 700;
+}
+
+.note-danger {
+  color: var(--bad);
+  font-weight: 700;
+}
+
+.note-close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 4px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ideas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.idea,
+.review {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.idea-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.review {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.review-grade {
+  font-weight: 800;
+}
+
+.grade-best .review-grade {
+  color: var(--good);
+}
+
+.grade-weak .review-grade {
+  color: var(--bad);
+}
+
+.reasons {
+  margin: 6px 0 0;
+  padding-left: 1.2em;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.925rem;
+}
+
+.sheet summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.sheet p {
+  margin-top: 4px;
+}
+
+.sheet-grid {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+  gap: 4px;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.sheet-grid li {
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--muted);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.sheet-grid b {
+  color: var(--ink);
+}
+
+.sheet-grid li.uses {
+  background: var(--tile);
+  color: var(--tile-ink);
+}
+
+.sheet-grid li.uses b {
+  color: var(--tile-ink);
+}
+
+.sheet-grid .star {
+  color: var(--tile-star);
+}
+
+/* Move history: every move, latest first; a placed move can be found on the board. */
+.log-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.log-move {
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.log-move:hover,
+.log-move.active {
+  background: var(--surface-2);
+}
+
+.log-move.active {
+  box-shadow: inset 3px 0 0 var(--mark-focus);
+}
+
+li.log-row {
+  padding: 3px 6px;
+}
+
+.log-n {
+  min-width: 2ch;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.log-name {
+  font-weight: 600;
+}
+
+.log-points {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.log.open {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.area-log .log {
+  margin: 8px 0;
+}
+
+/* The tiles and their points wrap as one piece. */
+.recap-move {
+  white-space: nowrap;
+}
+
+.mini-tiles {
+  display: inline-flex;
+  gap: 3px;
+  vertical-align: middle;
+}
+
+.mini-tiles .token {
+  width: 26px;
+  font-size: 14px;
+}
+
+.mini-tiles .token .count {
+  display: none;
 }
 
 .rack {
@@ -744,6 +1243,11 @@ input {
   background: rgb(0 0 0 / 0.45);
 }
 
+/* A dialog that takes focus itself (see Modal) needs no ring around the whole of it. */
+.dialog:focus {
+  outline: none;
+}
+
 .dialog > .dialog-body {
   padding: 24px;
   max-width: none;
@@ -759,9 +1263,13 @@ input {
 }
 
 @media (prefers-color-scheme: dark) {
-  .dialog.handoff::backdrop {
+  :root:not([data-theme="light"]) .dialog.handoff::backdrop {
     background: #071827;
   }
+}
+
+:root[data-theme="dark"] .dialog.handoff::backdrop {
+  background: #071827;
 }
 
 .dialog ol {
@@ -864,7 +1372,9 @@ input {
   padding: 0;
 }
 
-.segmented > div {
+/* .choice is the settings' version, with radio buttons inside (see Settings below). */
+.segmented > div,
+.choice {
   display: inline-flex;
   flex-wrap: wrap;
   background: var(--surface-2);
@@ -873,7 +1383,8 @@ input {
   gap: 2px;
 }
 
-.segmented button {
+.segmented button,
+.choice label {
   font: inherit;
   font-weight: 600;
   border: 0;
@@ -885,7 +1396,8 @@ input {
   cursor: pointer;
 }
 
-.segmented button.on {
+.segmented button.on,
+.choice label.on {
   background: var(--surface);
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.15);
   color: var(--accent);
@@ -1093,4 +1605,90 @@ a.history-main:hover {
 .seats .empty {
   color: var(--muted);
   font-weight: 400;
+}
+
+/* Settings */
+
+.dialog.settings .dialog-body {
+  gap: 20px;
+}
+
+@media (max-width: 480px) {
+  .dialog.settings > .dialog-body {
+    padding: 20px;
+  }
+}
+
+.setting {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.setting legend {
+  padding: 0;
+  margin-bottom: 10px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.check input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.setting-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* One option out of a few, styled like the home page's choices. The radio buttons
+   stay in the page, invisible, for keyboards and screen readers. */
+.choice {
+  align-self: flex-start;
+}
+
+.choice label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.choice input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+
+.choice label:has(input:focus-visible) {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.choice.disabled {
+  opacity: 0.45;
+}
+
+.choice.disabled label {
+  cursor: not-allowed;
 }

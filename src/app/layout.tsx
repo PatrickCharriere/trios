@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { I18nProvider } from "@/i18n/I18nProvider";
 import { Header } from "@/components/Header";
+import { THEME_SCRIPT } from "@/lib/settings";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -19,7 +20,11 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="fr">
+    // The inline script applies a chosen theme before the first paint; it can change data-theme before React hydrates.
+    <html lang="fr" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body>
         <I18nProvider>
           <Header />

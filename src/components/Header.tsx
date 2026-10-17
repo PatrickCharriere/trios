@@ -1,13 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
+import { followThemeFromOtherTabs } from "@/lib/settings";
+import { unlockAudioOnFirstGesture } from "@/lib/sound";
 import { RulesDialog } from "./RulesDialog";
+import { SettingsDialog } from "./SettingsDialog";
 
 export function Header() {
   const { lang, t, setLang } = useI18n();
-  const [rulesOpen, setRulesOpen] = useState(false);
+  const [open, setOpen] = useState<"rules" | "settings" | null>(null);
+
+  // The header is on every page, so it is where sounds get ready on the first tap
+  // and where a theme picked in another tab is picked up.
+  useEffect(() => unlockAudioOnFirstGesture(), []);
+  useEffect(() => followThemeFromOtherTabs(), []);
 
   return (
     <header className="site-header">
@@ -20,7 +28,7 @@ export function Header() {
         <span className="brand-name">Trios</span>
       </Link>
       <nav className="header-actions">
-        <button type="button" className="btn ghost" onClick={() => setRulesOpen(true)}>
+        <button type="button" className="btn ghost" onClick={() => setOpen("rules")}>
           {t.rules}
         </button>
         <button
@@ -32,8 +40,19 @@ export function Header() {
         >
           {t.switchToShort}
         </button>
+        <button
+          type="button"
+          className="btn ghost settings-btn"
+          onClick={() => setOpen("settings")}
+          aria-label={t.settings.title}
+          title={t.settings.title}
+        >
+          <span aria-hidden="true">⚙</span>
+          <span className="settings-label">{t.settings.title}</span>
+        </button>
       </nav>
-      {rulesOpen && <RulesDialog onClose={() => setRulesOpen(false)} />}
+      {open === "rules" && <RulesDialog onClose={() => setOpen(null)} />}
+      {open === "settings" && <SettingsDialog onClose={() => setOpen(null)} onRules={() => setOpen("rules")} />}
     </header>
   );
 }

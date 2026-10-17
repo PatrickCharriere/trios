@@ -1,4 +1,4 @@
-import type { BotLevel, RuleError } from "@/engine";
+import type { BotLevel, Grade, Reason, RuleError } from "@/engine";
 
 export type Lang = "fr" | "en";
 
@@ -15,6 +15,25 @@ const fr = {
   tagline: "Le jeu de chiffres où chaque ligne de trois fait 15.",
   rules: "Règles",
   close: "Fermer",
+  settings: {
+    title: "Réglages",
+    name: "Votre nom",
+    nameHint: "Proposé quand vous lancez ou rejoignez une partie.",
+    sound: "Sons",
+    soundOn: `Jouer des sons${NB}: votre tour, jeton posé, fin de partie`,
+    volumeLow: "Doux",
+    volumeMedium: "Moyen",
+    volumeHigh: "Fort",
+    test: "Écouter",
+    theme: "Apparence",
+    themeAuto: "Automatique",
+    themeLight: "Clair",
+    themeDark: "Sombre",
+    game: "Jeu",
+    blink: "Faire clignoter le dernier coup jusqu’au coup suivant",
+    language: "Langue",
+    rules: "Voir les règles",
+  },
   switchTo: "English",
   switchToShort: "EN",
   home: {
@@ -44,6 +63,7 @@ const fr = {
     bagCount: (n: number) => `Sac${NB}: ${n} jeton${s(n)}`,
     tiles: (n: number) => `${n} jeton${s(n)}`,
     yourTurn: "À vous de jouer",
+    yourTurnTitle: "● À vous de jouer · Trios",
     turnOf: (name: string) => `Au tour de ${name}`,
     thinking: (name: string) => `${name} réfléchit…`,
     you: "vous",
@@ -61,7 +81,8 @@ const fr = {
     trio: "trio",
     triolet: `Triolet${NB}! +50`,
     replay: `Rejouez${NB}!`,
-    lastMoves: "Derniers coups",
+    lastMoves: "Coups joués",
+    historyHint: "Touchez un coup pour le retrouver sur le plateau.",
     noMoves: "Aucun coup pour l’instant.",
     spectator: "Vous regardez la partie.",
     wildTitle: "Valeur du joker",
@@ -76,9 +97,87 @@ const fr = {
     wild: "joker",
   },
   log: {
-    place: (name: string, points: number) => `${name}${NB}: ${points}${NB}pts`,
     exchange: (name: string, n: number) => `${name} échange ${n} jeton${s(n)}`,
     pass: (name: string) => `${name} passe`,
+    points: (n: number) => `${n}${NB}pts`,
+  },
+  recap: {
+    placed: (name: string) => `${name} a posé`,
+    scored: (n: number) => `${NB}: ${n}${NB}point${s(n)}`,
+  },
+  teach: {
+    turnOn: "Mode apprentissage",
+    title: "Apprentissage",
+    turnOff: "Désactiver",
+    intro: "Touchez une case vide pour voir ce qui peut y aller.",
+    onlineNote: "En ligne, le coach commente vos coups une fois joués, pour que la partie reste équitable.",
+    showMarks: "Voir les possibilités",
+    hideMarks: "Masquer les possibilités",
+    markLabel: (label: string) => `possible${NB}: ${label}`,
+    showDanger: "Zones à risque",
+    hideDanger: "Masquer les risques",
+    dangerHint:
+      "En rouge, là où l’adversaire pourrait marquer gros au prochain tour (le chiffre est son maximum). Posez vos jetons pour voir ce que votre coup lui ouvre.",
+    dangerWorking: "Le coach repère les risques…",
+    dangerNone: "Aucun gros risque en vue.",
+    dangerLabel: (n: number) => `risque${NB}: jusqu’à ${n}${NB}points`,
+    askIdea: `Une idée${NB}?`,
+    thinking: "Le coach réfléchit…",
+    noMove: `Aucun coup possible${NB}: échangez vos jetons ou passez.`,
+    show: "Montrer",
+    topScore: "C’est le coup qui rapporte le plus tout de suite.",
+    replyAbout: (n: number) => `Ensuite, l’adversaire peut marquer environ ${n}${NB}point${s(n)}.`,
+    points: (n: number) => `${n}${NB}point${s(n)}`,
+    reason: (r: Reason): string => {
+      switch (r.kind) {
+        case "points":
+          return `marque ${r.more}${NB}point${s(r.more)} de plus`;
+        case "safer":
+          return `l’adversaire ne pourra marquer qu’environ ${r.reply}${NB}point${s(r.reply)} ensuite, au lieu de ${r.otherReply}`;
+        case "keepsOpen":
+          return "laisse plus de place pour jouer";
+        case "noSquare":
+          return "évite un carré de 4 jetons, qui ferme le jeu";
+        case "keepsWild":
+          return "garde le joker pour plus tard";
+        case "replay":
+          return "vous fait rejouer";
+        case "triolet":
+          return "fait un Triolet, 50 points de bonus";
+      }
+    },
+    grade: {
+      best: `Excellent coup${NB}!`,
+      good: "Bon coup.",
+      fair: "Pas mal, mais il y avait mieux.",
+      weak: "Il y avait beaucoup mieux.",
+    } satisfies Record<Grade, string>,
+    reviewing: "Le coach regarde votre coup…",
+    coachWould: "Le coach aurait joué",
+    couldPlay: "Vous pouviez poser",
+    nothingPossible: `Aucun coup n’était possible${NB}: bien vu.`,
+    smartChoice: `Bien vu, par rapport au coup qui rapportait le plus${NB}:`,
+    compare: "Voir",
+    compareTitle: "Votre coup et l’idée du coach",
+    yourMove: "Votre coup",
+    coachMove: "Idée du coach",
+    square: {
+      trio: (tiles: string, sum: number, need: number) => `${tiles} = ${sum}${NB}: il faut un ${need} pour faire 15.`,
+      tooHigh: (tiles: string, sum: number) => `${tiles} = ${sum}${NB}: c’est déjà plus de 15.`,
+      pair: (tile: number, max: number) => `À côté du ${tile}${NB}: ${max} au plus, pour ne pas dépasser 15.`,
+      tooLong: `Ce serait le quatrième jeton aligné${NB}: interdit.`,
+      trioHere: (value: number, points: number) => `Un ${value} ici fait un trio${NB}: ${points}${NB}points.`,
+      range: (max: number) => (max === 0 ? "Seul un 0 peut aller ici." : `Possible ici${NB}: de 0 à ${max}.`),
+      none: "Aucun jeton ne peut aller ici.",
+      squareRule: `Interdit pour l’instant${NB}: cela formerait un carré de jetons.`,
+      yours: (list: string) => `Vos jetons qui vont ici${NB}: ${list}.`,
+      noneOfYours: "Aucun de vos jetons ne va ici.",
+      wild: "le joker",
+      danger: (most: number, average: number) =>
+        `Risque${NB}: l’adversaire pourrait marquer jusqu’à ${most}${NB}points en jouant ici, environ ${average} en moyenne selon ses jetons.`,
+    },
+    sheetTitle: "Les 27 trios de 15",
+    sheetHint: "En gras, vos jetons. En couleur, les trios où il ne vous manque qu’un jeton du plateau. ★ : faisable avec votre seul chevalet.",
   },
   over: {
     title: "Partie terminée",
@@ -186,6 +285,25 @@ const en: Messages = {
   tagline: "The number game where every line of three adds up to 15.",
   rules: "Rules",
   close: "Close",
+  settings: {
+    title: "Settings",
+    name: "Your name",
+    nameHint: "Suggested when you start or join a game.",
+    sound: "Sounds",
+    soundOn: "Play sounds: your turn, tile placed, game over",
+    volumeLow: "Soft",
+    volumeMedium: "Medium",
+    volumeHigh: "Loud",
+    test: "Listen",
+    theme: "Appearance",
+    themeAuto: "Automatic",
+    themeLight: "Light",
+    themeDark: "Dark",
+    game: "Game",
+    blink: "Make the last move blink until the next one",
+    language: "Language",
+    rules: "Read the rules",
+  },
   switchTo: "Français",
   switchToShort: "FR",
   home: {
@@ -215,6 +333,7 @@ const en: Messages = {
     bagCount: (n) => `Bag: ${n} tile${es(n)}`,
     tiles: (n) => `${n} tile${es(n)}`,
     yourTurn: "Your turn",
+    yourTurnTitle: "● Your turn · Trios",
     turnOf: (name) => `${name}’s turn`,
     thinking: (name) => `${name} is thinking…`,
     you: "you",
@@ -232,7 +351,8 @@ const en: Messages = {
     trio: "trio",
     triolet: "Triolet! +50",
     replay: "Play again!",
-    lastMoves: "Recent moves",
+    lastMoves: "Moves played",
+    historyHint: "Tap a move to find it on the board.",
     noMoves: "No moves yet.",
     spectator: "You’re watching this game.",
     wildTitle: "Wild value",
@@ -247,9 +367,87 @@ const en: Messages = {
     wild: "wild",
   },
   log: {
-    place: (name, points) => `${name}: ${points} pt${es(points)}`,
     exchange: (name, n) => `${name} exchanged ${n} tile${es(n)}`,
     pass: (name) => `${name} passed`,
+    points: (n) => `${n} pt${es(n)}`,
+  },
+  recap: {
+    placed: (name) => `${name} played`,
+    scored: (n) => `: ${n} point${es(n)}`,
+  },
+  teach: {
+    turnOn: "Teaching mode",
+    title: "Learning",
+    turnOff: "Turn off",
+    intro: "Tap an empty square to see what can go there.",
+    onlineNote: "Online, the coach comments on your moves once they’re played, so the game stays fair.",
+    showMarks: "Show what fits",
+    hideMarks: "Hide what fits",
+    markLabel: (label) => `fits: ${label}`,
+    showDanger: "Danger zones",
+    hideDanger: "Hide danger zones",
+    dangerHint:
+      "In red, where your opponent could score big next turn (the number is their best). Place your tiles to see what your move opens up.",
+    dangerWorking: "The coach is looking for danger…",
+    dangerNone: "No big danger in sight.",
+    dangerLabel: (n) => `danger: up to ${n} points`,
+    askIdea: "Any ideas?",
+    thinking: "The coach is thinking…",
+    noMove: "No move is possible: exchange your tiles or pass.",
+    show: "Show me",
+    topScore: "It’s the move that scores most right now.",
+    replyAbout: (n) => `Your opponent can then score about ${n} point${es(n)}.`,
+    points: (n) => `${n} point${es(n)}`,
+    reason: (r) => {
+      switch (r.kind) {
+        case "points":
+          return `scores ${r.more} more point${es(r.more)}`;
+        case "safer":
+          return `your opponent can only score about ${r.reply} point${es(r.reply)} next, instead of ${r.otherReply}`;
+        case "keepsOpen":
+          return "leaves more room to play";
+        case "noSquare":
+          return "avoids a square of 4 tiles, which closes the game";
+        case "keepsWild":
+          return "keeps the wild for later";
+        case "replay":
+          return "lets you play again";
+        case "triolet":
+          return "makes a Triolet, a 50 point bonus";
+      }
+    },
+    grade: {
+      best: "Excellent move!",
+      good: "Good move.",
+      fair: "Not bad, but there was better.",
+      weak: "There was much better.",
+    },
+    reviewing: "The coach is looking at your move…",
+    coachWould: "The coach would have played",
+    couldPlay: "You could have played",
+    nothingPossible: "No move was possible: well spotted.",
+    smartChoice: "Well judged, compared with the move that scored most:",
+    compare: "See it",
+    compareTitle: "Your move and the coach’s idea",
+    yourMove: "Your move",
+    coachMove: "Coach’s idea",
+    square: {
+      trio: (tiles, sum, need) => `${tiles} = ${sum}: a ${need} is needed to make 15.`,
+      tooHigh: (tiles, sum) => `${tiles} = ${sum}: already more than 15.`,
+      pair: (tile, max) => `Next to the ${tile}: ${max} at most, so as not to go over 15.`,
+      tooLong: "It would be the fourth tile in a row: not allowed.",
+      trioHere: (value, points) => `A ${value} here makes a trio: ${points} points.`,
+      range: (max) => (max === 0 ? "Only a 0 can go here." : `Fits here: 0 to ${max}.`),
+      none: "No tile can go here.",
+      squareRule: "Not allowed yet: it would make a square of tiles.",
+      yours: (list) => `Your tiles that fit here: ${list}.`,
+      noneOfYours: "None of your tiles fits here.",
+      wild: "the wild",
+      danger: (most, average) =>
+        `Danger: your opponent could score up to ${most} points by playing here, about ${average} on average depending on their tiles.`,
+    },
+    sheetTitle: "The 27 trios that make 15",
+    sheetHint: "In bold, your tiles. Highlighted, the trios where you need just one tile from the board. ★: you could make it from your rack alone.",
   },
   over: {
     title: "Game over",
